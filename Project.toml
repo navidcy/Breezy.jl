@@ -1,0 +1,10 @@
+name = "AquaSkyLES"
+uuid = "660aa2fb-d4c8-4359-a52c-9c057bc511da"
+authors = ["Navid C. Constantinou <navidcy@users.noreply.github.com>, Madi, Greg, Marty, Callum"]
+version = "0.1.0"
+
+[deps]
+Oceananigans = "9e8cae18-63c1-5223-a75c-80ca9d6e9a09"
+
+[compat]
+Oceananigans = "0.96"
