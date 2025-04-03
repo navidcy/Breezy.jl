@@ -2,7 +2,11 @@
 
 Oceananigans.jl comes above the ocean's surface...
 
-To run, first [install Julia](https://julialang.org/downloads/). Then clone this repository
+### Using AquaSkyLES
+
+First [install Julia](https://julialang.org/downloads/).
+
+Then clone this repository
 
 ```bash
 $ git clone git@github.com:navidcy/AquaSkyLES.jl.git
