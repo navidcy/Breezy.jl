@@ -34,4 +34,4 @@ julia> include("examples/free_convection.jl")
 
 produces
 
-https://github.com/user-attachments/assets/cc52de82-3d06-4742-adc2-01129fa198d7
+https://github.com/user-attachments/assets/ffc1c718-2e05-42d2-b3a5-6c680c780741
