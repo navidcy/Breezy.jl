@@ -2,7 +2,7 @@
 
 Oceananigans.jl comes above the ocean's surface...
 
-### Using AquaSkyLES
+### Instructions
 
 First [install Julia](https://julialang.org/downloads/).
 
