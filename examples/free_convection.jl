@@ -41,20 +41,33 @@ run!(simulation)
 
 θt = FieldTimeSeries("free_convection.jld2", "θ")
 qt = FieldTimeSeries("free_convection.jld2", "q")
+times = qt.times
 Nt = length(θt)
 
-using GLMakie
+using GLMakie, Printf
 
-fig = Figure(size=(1600, 400))
+n = Observable(length(θt))
+
+θn = @lift θt[$n]
+qn = @lift qt[$n]
+title = @lift "t = $(prettytime(times[$n]))"
+
+fig = Figure(size=(1600, 400), fontsize=22)
 axθ = Axis(fig[1, 1], xlabel="x (m)", ylabel="z (m)")
 axq = Axis(fig[1, 2], xlabel="x (m)", ylabel="z (m)")
 
-n = Observable(length(θt))
-θn = @lift θt[$n]
-qn = @lift qt[$n]
+fig[0, :] = Label(fig, title, fontsize=22, tellwidth=false)
 
-heatmap!(axθ, θn)
-heatmap!(axq, qn)
+hmθ = heatmap!(axθ, θn, colorrange=(Tₛ, Tₛ+Δθ))
+hmq = heatmap!(axq, qn, colorrange=(0, 8e-5), colormap=:magma)
+
+Label(fig[0, 1], "θ", tellwidth=false)
+Label(fig[0, 2], "q", tellwidth=false)
+
+Colorbar(fig[2, 1], hmθ, label = "[ᵒC]", vertical=false)
+Colorbar(fig[2, 2], hmq, label = "", vertical=false)
+
+fig
 
 record(fig, "free_convection.mp4", 1:Nt, framerate=12) do nn
     n[] = nn
