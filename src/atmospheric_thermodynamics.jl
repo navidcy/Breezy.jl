@@ -40,6 +40,19 @@ struct AtmosphereThermodynamics{FT, C}
     condensation :: C
 end
 
+"""
+    AtmosphereThermodynamics(FT = Oceananigans.defaults.FloatType;
+                             molar_gas_constant = 8.314462618,
+                             dry_air_molar_mass = 0.02897,
+                             dry_air_isentropic_exponent = 2/7,
+                             vapor_molar_mass = 0.018015,
+                             vapor_isentropic_exponent = 4.03,
+                             condensation = nothing)
+
+Create `AtmosphereThermodynamics` with parameters that correpsond to the composition of dry air
+in Earth's atmosphere and water vapor. The default `isnothing(condensation)` implies thermodynamics
+appropriate for unsaturated and therefore non-condensing air.
+"""
 function AtmosphereThermodynamics(FT = Oceananigans.defaults.FloatType;
                                   molar_gas_constant = 8.314462618,
                                   dry_air_molar_mass = 0.02897,
@@ -55,9 +68,7 @@ function AtmosphereThermodynamics(FT = Oceananigans.defaults.FloatType;
                          isentropic_exponent = vapor_isentropic_exponent)
 
     return AtmosphereThermodynamics(convert(FT, molar_gas_constant),
-                                    dry_air,
-                                    vapor,
-                                    condensation)
+                                    dry_air, vapor, condensation)
 end
 
 #####
