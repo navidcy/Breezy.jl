@@ -1,38 +1,20 @@
-struct IdealGasThermodynamicsConstants{FT}
-    gas_constant :: FT
+struct IdealGas{FT}
     molar_mass :: FT
-    isentropic_exponent :: FT
+    isentropic_exponent :: FT # κ = γ / (γ - 1)
 end
 
-function IdealGasThermodynamicsConstants(FT = Oceananigans.defaults.FloatType;
-                                        gas_constant = 8.3144598,
-                                        isentropic_exponent = 2/7,
-                                        molar_mass = 0.02897)
+heat_capacity(gas_constant, igc::IdealGas) = igc.isentropic_exponent * gas_constant / igc.molar_mass
 
-    return IdealGasThermodynamicsConstants{FT}(convert(FT, isentropic_exponent),
-                                              convert(FT, molar_mass))
+function IdealGas(FT = Oceananigans.defaults.FloatType;
+                           molar_mass = 0.02897,
+                           isentropic_exponent = 2/7)
+
+    return IdealGas{FT}(convert(FT, molar_mass),
+                                 convert(FT, isentropic_exponent))
+                                 
 end
 
-struct VaporThermodynamicsConstants{FT}
-    molar_mass :: FT
-    heat_capacity  :: FT
-end
-
-"""
-    VaporThermodynamicsConstants
-
-Build thermodynamic constants for a condensable vapor component in a mixture of gases.
-The defaults apply to water vapor.
-"""
-function VaporThermodynamicsConstants(FT = Oceananigans.defaults.FloatType;
-                                     molar_mass   = 1859,
-                                     heat_capacity = 0.018015)
-
-    return GasConstituentThermodynamicsConstants{FT}(convert(FT, molar_mass),
-                                                    convert(FT, heat_capacity))
-end
-
-struct CondensationThermodynamicssConstants{FT}
+struct Condensation{FT}
     reference_vaporization_enthalpy :: FT
     energy_reference_temperature :: FT
     triple_point_temperature :: FT
@@ -40,38 +22,54 @@ struct CondensationThermodynamicssConstants{FT}
     liquid_heat_capacity :: FT
 end
 
-function CondensationThermodynamicssConstants(FT = Oceananigans.defaults.FloatType;
-                                             reference_vaporization_enthalpy = 2500800,
-                                             energy_reference_temperature = 273.16,
-                                             water_vapor_heat_capacity = 1859,
-                                             triple_point_temperature = 273.16,
-                                             triple_point_pressure = 611.657)
+function Condensation(FT = Oceananigans.defaults.FloatType;
+                      reference_vaporization_enthalpy = 2500800,
+                      energy_reference_temperature = 273.16,
+                      vapor_heat_capacity = 1859,
+                      triple_point_temperature = 273.16,
+                      triple_point_pressure = 611.657)
 
-    return CondensationThermodynamicssConstants{FT}(convert(FT, reference_vaporization_enthalpy),
-                                                   convert(FT, energy_reference_temperature),
-                                                   convert(FT, water_vapor_heat_capacity),
-                                                   convert(FT, triple_point_temperature),
-                                                   convert(FT, triple_point_pressure))
+    return Condensation{FT}(convert(FT, reference_vaporization_enthalpy),
+                            convert(FT, energy_reference_temperature),
+                            convert(FT, vapor_heat_capacity),
+                            convert(FT, triple_point_temperature),
+                            convert(FT, triple_point_pressure))
 end
 
-
-const DATC = IdealGasThermodynamicsConstants
-const WVTC = WaterVaporThermodynamicsConstants
-const CTC =  CondensationThermodynamicssConstants
-
-Base.eltype(::DATC{FT}) where FT = FT
-Base.eltype(::WVTC{FT}) where FT = FT
-Base.eltype(::CTC{FT})  where FT = FT
-
-struct ThermodynamicsConstants{FT, C}
-    dry_air :: IdealGasThermodynamicsConstants{FT}
-    water_vapor :: VaporThermodynamicsConstants{FT}
+struct AtmosphereThermodynamics{FT, C}
+    molar_gas_constant :: FT
+    dry_air :: IdealGas{FT}
+    vapor :: IdealGas{FT}
     condensation :: C
 end
 
-vapor_specific_gas_constant(tc::ThermodynamicsConstants) = tc.dry_air.gas_constant / tc.water_vapor.molar_mass
+function AtmosphereThermodynamics(FT = Oceananigans.defaults.FloatType;
+                                  molar_gas_constant = 8.314462618,
+                                  dry_air_molar_mass = 0.02897,
+                                  dry_air_isentropic_exponent = 2/7,
+                                  vapor_molar_mass = 0.018015,
+                                  vapor_isentropic_exponent = 4.03,
+                                  condensation = nothing)
 
-const DryAirThermodynamicsConstants{FT} = DryAirThermodynamicsConstants{FT, Nothing} 
+    dry_air = IdealGas(FT; molar_mass = dry_air_molar_mass,
+                           isentropic_exponent = dry_air_isentropic_exponent)
+
+    vapor = IdealGas(FT; molar_mass = vapor_molar_mass,
+                         isentropic_exponent = vapor_isentropic_exponent)
+
+    return AtmosphereThermodynamics(convert(FT, molar_gas_constant),
+                                     dry_air,
+                                     vapor,
+                                     condensation)
+end
+
+@inline gas_heat_capacity(molar_gas_constant, igc::IdealGas) = igc.isentropic_exponent * gas_constant / igc.molar_mass
+@inline dry_air_heat_capacity(tc::AtmosphereThermodynamics)            = gas_heat_capacity(tc.molar_gas_constant, tc.dry_air)
+@inline vapor_heat_capacity(tc::AtmosphereThermodynamics)              = gas_heat_capacity(tc.molar_gas_constant, tc.vapor)
+@inline vapor_specific_gas_constant(tc::AtmosphereThermodynamics)      = tc.molar_gas_constant / tc.vapor.molar_mass
+@inline dry_air_specific_gas_constant(tc::AtmosphereThermodynamics)    = tc.molar_gas_constant / tc.dry_air.molar_mass
+
+const NonCondensingAtmosphereThermodynamics{FT} = AtmosphereThermodynamics{FT, Nothing} 
 
 @inline function saturation_vapor_pressure(T, thermodynamics_constants)
     ℒ₀  = thermodynamics_constants.condesation.reference_vaporization_enthalpy
@@ -79,7 +77,7 @@ const DryAirThermodynamicsConstants{FT} = DryAirThermodynamicsConstants{FT, Noth
     Tᵗʳ = thermodynamics_constants.condesation.triple_point_temperature
     pᵗʳ = thermodynamics_constants.condesation.triple_point_pressure
     cᵖℓ = thermodynamics_constants.condesation.liquid_heat_capacity
-    cᵖv = thermodynamics_constants.water_vapor.heat_capacity
+    cᵖv = vapor_specific_heat_capacity(thermodynamics_constants)
     Rᵛ  = vapor_specific_gas_constant(thermodynamics_constants)
     Δc  = cᵖℓ - cᵖv
 
