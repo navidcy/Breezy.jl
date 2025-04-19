@@ -3,11 +3,9 @@ struct IdealGas{FT}
     isentropic_exponent :: FT # κ = γ / (γ - 1)
 end
 
-heat_capacity(gas_constant, igc::IdealGas) = igc.isentropic_exponent * gas_constant / igc.molar_mass
-
 function IdealGas(FT = Oceananigans.defaults.FloatType;
-                           molar_mass = 0.02897,
-                           isentropic_exponent = 2/7)
+                  molar_mass = 0.02897,
+                  isentropic_exponent = 2/7)
 
     return IdealGas{FT}(convert(FT, molar_mass),
                                  convert(FT, isentropic_exponent))
@@ -58,12 +56,16 @@ function AtmosphereThermodynamics(FT = Oceananigans.defaults.FloatType;
                          isentropic_exponent = vapor_isentropic_exponent)
 
     return AtmosphereThermodynamics(convert(FT, molar_gas_constant),
-                                     dry_air,
-                                     vapor,
-                                     condensation)
+                                    dry_air,
+                                    vapor,
+                                    condensation)
 end
 
-@inline gas_heat_capacity(molar_gas_constant, igc::IdealGas) = igc.isentropic_exponent * gas_constant / igc.molar_mass
+#####
+##### Computations
+#####
+
+@inline gas_heat_capacity(molar_gas_constant, igc::IdealGas)           = igc.isentropic_exponent * gas_constant / igc.molar_mass
 @inline dry_air_heat_capacity(tc::AtmosphereThermodynamics)            = gas_heat_capacity(tc.molar_gas_constant, tc.dry_air)
 @inline vapor_heat_capacity(tc::AtmosphereThermodynamics)              = gas_heat_capacity(tc.molar_gas_constant, tc.vapor)
 @inline vapor_specific_gas_constant(tc::AtmosphereThermodynamics)      = tc.molar_gas_constant / tc.vapor.molar_mass
