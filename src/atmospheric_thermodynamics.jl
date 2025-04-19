@@ -8,8 +8,7 @@ function IdealGas(FT = Oceananigans.defaults.FloatType;
                   isentropic_exponent = 2/7)
 
     return IdealGas{FT}(convert(FT, molar_mass),
-                                 convert(FT, isentropic_exponent))
-                                 
+                        convert(FT, isentropic_exponent))
 end
 
 struct Condensation{FT}
