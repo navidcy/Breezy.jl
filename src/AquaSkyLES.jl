@@ -8,6 +8,7 @@ import Oceananigans.BuoyancyFormulations: AbstractBuoyancyFormulation,
                                           buoyancy_perturbationᶜᶜᶜ,
                                           required_tracers
 
+include("atmospheric_thermodynamics.jl")
 
 struct MoistAirBuoyancy{FT} <: AbstractBuoyancyFormulation{Nothing}
     expansion_coefficient :: FT
@@ -37,5 +38,6 @@ required_tracers(::MoistAirBuoyancy) = (:θ, :q)
     θᵥ = θ * (1 + δ * q)
     return β * (θᵥ - θ₀)
 end
+
 
 end # module AquaSkyLES

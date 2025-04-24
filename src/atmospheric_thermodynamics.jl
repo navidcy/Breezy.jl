@@ -22,15 +22,15 @@ end
 function Condensation(FT = Oceananigans.defaults.FloatType;
                       reference_vaporization_enthalpy = 2500800,
                       energy_reference_temperature = 273.16,
-                      vapor_heat_capacity = 1859,
+                      liquid_heat_capacity = 4181,
                       triple_point_temperature = 273.16,
                       triple_point_pressure = 611.657)
 
     return Condensation{FT}(convert(FT, reference_vaporization_enthalpy),
                             convert(FT, energy_reference_temperature),
-                            convert(FT, vapor_heat_capacity),
                             convert(FT, triple_point_temperature),
-                            convert(FT, triple_point_pressure))
+                            convert(FT, triple_point_pressure),
+                            convert(FT, liquid_heat_capacity))
 end
 
 struct AtmosphereThermodynamics{FT, C}
@@ -59,7 +59,7 @@ function AtmosphereThermodynamics(FT = Oceananigans.defaults.FloatType;
                                   dry_air_isentropic_exponent = 2/7,
                                   vapor_molar_mass = 0.018015,
                                   vapor_isentropic_exponent = 4.03,
-                                  condensation = nothing)
+                                  condensation = Condensation(FT))
 
     dry_air = IdealGas(FT; molar_mass = dry_air_molar_mass,
                            isentropic_exponent = dry_air_isentropic_exponent)
@@ -75,20 +75,23 @@ end
 ##### Computations
 #####
 
-@inline gas_heat_capacity(molar_gas_constant, igc::IdealGas)           = igc.isentropic_exponent * gas_constant / igc.molar_mass
-@inline dry_air_heat_capacity(tc::AtmosphereThermodynamics)            = gas_heat_capacity(tc.molar_gas_constant, tc.dry_air)
-@inline vapor_heat_capacity(tc::AtmosphereThermodynamics)              = gas_heat_capacity(tc.molar_gas_constant, tc.vapor)
-@inline vapor_specific_gas_constant(tc::AtmosphereThermodynamics)      = tc.molar_gas_constant / tc.vapor.molar_mass
-@inline dry_air_specific_gas_constant(tc::AtmosphereThermodynamics)    = tc.molar_gas_constant / tc.dry_air.molar_mass
+const AT = AtmosphereThermodynamics
+const IG = IdealGas
+
+@inline gas_heat_capacity(R, ig::IG) = ig.isentropic_exponent * R / ig.molar_mass
+@inline dry_air_heat_capacity(td::AT)         = gas_heat_capacity(td.molar_gas_constant, td.dry_air)
+@inline vapor_specific_heat_capacity(td::AT)  = gas_heat_capacity(td.molar_gas_constant, td.vapor)
+@inline vapor_specific_gas_constant(td::AT)   = td.molar_gas_constant / td.vapor.molar_mass
+@inline dry_air_specific_gas_constant(td::AT) = td.molar_gas_constant / td.dry_air.molar_mass
 
 const NonCondensingAtmosphereThermodynamics{FT} = AtmosphereThermodynamics{FT, Nothing} 
 
 @inline function saturation_vapor_pressure(T, thermodynamics_constants)
-    ℒ₀  = thermodynamics_constants.condesation.reference_vaporization_enthalpy
-    T₀  = thermodynamics_constants.condesation.energy_reference_temperature
-    Tᵗʳ = thermodynamics_constants.condesation.triple_point_temperature
-    pᵗʳ = thermodynamics_constants.condesation.triple_point_pressure
-    cᵖℓ = thermodynamics_constants.condesation.liquid_heat_capacity
+    ℒ₀  = thermodynamics_constants.condensation.reference_vaporization_enthalpy
+    T₀  = thermodynamics_constants.condensation.energy_reference_temperature
+    Tᵗʳ = thermodynamics_constants.condensation.triple_point_temperature
+    pᵗʳ = thermodynamics_constants.condensation.triple_point_pressure
+    cᵖℓ = thermodynamics_constants.condensation.liquid_heat_capacity
     cᵖv = vapor_specific_heat_capacity(thermodynamics_constants)
     Rᵛ  = vapor_specific_gas_constant(thermodynamics_constants)
     Δc  = cᵖℓ - cᵖv
@@ -96,8 +99,50 @@ const NonCondensingAtmosphereThermodynamics{FT} = AtmosphereThermodynamics{FT, N
     return pᵗʳ * (T / Tᵗʳ)^(Δc / Rᵛ) * exp((ℒ₀ - Δc * T₀) * (1/Tᵗʳ - 1/T) / Rᵛ)
 end
 
-@inline function saturation_specific_humidity(T, ρ, thermodynamics_constants)
-    p★ = saturation_vapor_pressure(T, thermodynamics_constants)
-    Rᵛ = vapor_specific_gas_constant(thermodynamics_constants)
+@inline function saturation_specific_humidity(T, ρ, td)
+    p★ = saturation_vapor_pressure(T, td)
+    Rᵛ = vapor_specific_gas_constant(td)
     return p★ / (ρ * Rᵛ * T)
+end
+
+# p = ρ R(q) T(θ, q)
+# θ(q, T)
+# variable sets
+# prognostic (θ, q, ρ)
+#
+# auxiliary
+# p → T
+# T → p
+
+struct MoistPrognosticState{FT}
+    ρ :: FT
+    θ :: FT
+    q :: FT
+end
+
+struct MoistAuxiliaryState{FT}
+    p :: FT
+    T :: FT
+    q :: FT
+end
+
+@inline function mixture_specific_gas_constant(q, thermo::AT)
+    Rᵈ = dry_air_specific_gas_constant(thermo)   
+    Rᵛ = vapor_specific_gas_constant(thermo)   
+    return Rᵈ * (1 - q) + Rᵛ * q
+end
+
+@inline mixture_specific_gas_constant(aux::MoistAuxiliaryState, thermo::AT) =
+    mixture_specific_gas_constant(aux.q, thermo)
+
+function density(aux::MoistAuxiliaryState, thermo)
+    Rᵐ = mixture_specific_gas_constant(aux, thermo)
+    return aux.p / (Rᵐ * aux.T)
+end
+
+@inline function saturation_specific_humidity(aux::MoistAuxiliaryState, td)
+    ρ = density(aux, td)
+    p★ = saturation_vapor_pressure(aux.T, td)
+    Rᵛ = vapor_specific_gas_constant(td)
+    return p★ / (ρ * Rᵛ * aux.T)
 end
