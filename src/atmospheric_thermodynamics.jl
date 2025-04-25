@@ -82,16 +82,15 @@ end
 const AT = AtmosphereThermodynamics
 const IG = IdealGas
 
-@inline gas_heat_capacity(R, ig::IG)          = ig.isentropic_exponent * R / ig.molar_mass
-@inline dry_air_heat_capacity(td::AT)         = gas_heat_capacity(td.molar_gas_constant, td.dry_air)
-@inline vapor_heat_capacity(td::AT)           = gas_heat_capacity(td.molar_gas_constant, td.vapor)
-@inline vapor_gas_constant(td::AT)            = td.molar_gas_constant / td.vapor.molar_mass
-@inline dry_air_gas_constant(td::AT) = td.molar_gas_constant / td.dry_air.molar_mass
+@inline gas_heat_capacity(R, ig::IG)      = ig.isentropic_exponent * R / ig.molar_mass
+@inline dry_air_heat_capacity(thermo::AT) = gas_heat_capacity(thermo.molar_gas_constant, thermo.dry_air)
+@inline vapor_heat_capacity(thermo::AT)   = gas_heat_capacity(thermo.molar_gas_constant, thermo.vapor)
+@inline vapor_gas_constant(thermo::AT)    = thermo.molar_gas_constant / thermo.vapor.molar_mass
+@inline dry_air_gas_constant(thermo::AT)  = thermo.molar_gas_constant / thermo.dry_air.molar_mass
 
 const NonCondensingAtmosphereThermodynamics{FT} = AtmosphereThermodynamics{FT, Nothing} 
 
 @inline function saturation_vapor_pressure(T, thermodynamics_constants)
-    @show T
     ℒ₀  = thermodynamics_constants.condensation.reference_vaporization_enthalpy
     T₀  = thermodynamics_constants.condensation.energy_reference_temperature
     Tᵗʳ = thermodynamics_constants.condensation.triple_point_temperature
@@ -100,67 +99,83 @@ const NonCondensingAtmosphereThermodynamics{FT} = AtmosphereThermodynamics{FT, N
     cᵖv = vapor_heat_capacity(thermodynamics_constants)
     Rᵛ  = vapor_gas_constant(thermodynamics_constants)
     Δc  = cᵖℓ - cᵖv
-    T⁺ = max(T, Tᵗʳ)
-
-    return pᵗʳ * (T⁺ / Tᵗʳ)^(Δc / Rᵛ) * exp((ℒ₀ - Δc * T₀) * (1/Tᵗʳ - 1/T⁺) / Rᵛ)
+    # T = max(T, Tᵗʳ)
+    return pᵗʳ * (T / Tᵗʳ)^(Δc / Rᵛ) * exp((ℒ₀ - Δc * T₀) * (1/Tᵗʳ - 1/T) / Rᵛ)
 end
 
-@inline function saturation_specific_humidity(T, ρ, td)
-    p★ = saturation_vapor_pressure(T, td)
-    Rᵛ = vapor_gas_constant(td)
+# Over a liquid surface
+@inline function saturation_specific_humidity(T, ρ, thermo)
+    p★ = saturation_vapor_pressure(T, thermo)
+    Rᵛ = vapor_gas_constant(thermo)
     return p★ / (ρ * Rᵛ * T)
 end
 
-# p = ρ R(q) T(θ, q)
-# θ(q, T)
-# variable sets
-# prognostic (θ, q, ρ)
-#
-# auxiliary
-# p → T
-# T → p
-
-struct MoistState{FT}
-    ρ :: FT
-    θ :: FT
-    q :: FT
-    z :: FT
-end
-
-struct MoistAuxiliaryState{FT}
-    p :: FT
-    T :: FT
-    q :: FT
-end
-
-@inline function specific_gas_constant(q, thermo::AT)
+@inline function mixture_gas_number(q, thermo::AT)
     Rᵈ = dry_air_gas_constant(thermo)   
     Rᵛ = vapor_gas_constant(thermo)   
     return Rᵈ * (1 - q) + Rᵛ * q
 end
 
-@inline function heat_capacity(q, thermo::AT)
+"""
+    mixture_heat_capacity(q, thermo)
+
+Compute the heat capacity of state air given the total specific humidity q
+and assuming that condensate mass ratio qℓ ≪ q, where qℓ is the mass ratio of
+liquid condensate.
+"""
+@inline function mixture_heat_capacity(q, thermo::AT)
     cᵖᵈ = dry_air_heat_capacity(thermo)
     cᵖᵛ = vapor_heat_capacity(thermo)
     return cᵖᵈ * (1 - q) + cᵖᵛ * q
 end
 
-function density(T, p, q, thermo)
-    Rᵐ = specific_gas_constant(q, thermo)
-    return p / (Rᵐ * T)
+#=
+For example, if we would like to account for the mass of condensate consistently:
+struct WarmCondensate{FT}
+    vapor :: FT
+    liquid :: FT
+    total :: FT
 end
 
-# Over a liquid surface
-@inline function saturation_specific_humidity(T, p, q, td)
-    ρ = density(T, p, q, td)
-    p★ = saturation_vapor_pressure(T, td)
-    Rᵛ = vapor_gas_constant(td)
-    return p★ / (ρ * Rᵛ * T)
+# Then more correctly:
+@inline function mixture_heat_capacity(q::WarmCondensate, thermo::AT)
+    cᵖᵈ = dry_air_heat_capacity(thermo)
+    cᵖᵛ = vapor_heat_capacity(thermo)
+    cᵖˡ = thermo.condensation.liquid_heat_capacity
+    qᵗ = q.total
+    qᵛ = q.vapor
+    qˡ = q.liquid
+    return cᵖᵈ * (1 - qᵗ) + cᵖᵛ * qᵛ + cᵖˡ * qˡ
+end
+
+@inline function mixture_gas_number(q::WarmCondensate, thermo::AT)
+=#
+
+#####
+##### state thermodynamics for a Boussinesq model
+#####
+
+# Organizing information about the state is a WIP
+struct ThermodynamicState{FT}
+    θ :: FT
+    q :: FT
+    z :: FT
 end
 
 struct ReferenceState{FT}
-    p :: FT
-    θ :: FT
+    p₀ :: FT # reference pressure at z=0
+    θ :: FT  # constant reference potential temperature
+end
+
+"""
+    reference_density(ref, thermo)
+
+Compute the reference density associated with the reference pressure and potential temperature.
+The reference density is defined as the density of dry air at the reference pressure and temperature.
+"""
+@inline function reference_density(ref, thermo)
+    Rᵈ = dry_air_gas_constant(thermo)
+    return ref.p₀ / (Rᵈ * ref.θ)
 end
 
 @inline function reference_pressure(z, ref, thermo)
@@ -168,53 +183,65 @@ end
     Rᵈ = dry_air_gas_constant(thermo)
     ϰᵈ = thermo.dry_air.isentropic_exponent
     g = thermo.gravitational_acceleration
-    return ref.p * (1 - g * z / (cᵖᵈ * ref.θ))^ϰᵈ
+    return ref.p₀ * (1 - g * z / (cᵖᵈ * ref.θ))^ϰᵈ
 end
 
-@inline function exner_function(prog, ref, thermo)
-    Rᵐ = specific_gas_constant(prog.q, thermo)
-    cᵖᵐ = heat_capacity(prog.q, thermo)
+@inline function saturation_specific_humidity(T, ref::ReferenceState, thermo)
+    ρ₀ = reference_density(ref, thermo)
+    return saturation_specific_humidity(T, ρ₀, thermo)
+end
+
+@inline function exner_function(state, ref, thermo)
+    Rᵐ = mixture_gas_number(state.q, thermo)
+    cᵖᵐ = mixture_heat_capacity(state.q, thermo)
     inv_ϰᵐ = Rᵐ / cᵖᵐ
-    pᵣ = reference_pressure(prog.z, ref, thermo)
-    return (pᵣ / ref.p)^inv_ϰᵐ
+    pᵣ = reference_pressure(state.z, ref, thermo)
+    return (pᵣ / ref.p₀)^inv_ϰᵐ
+end
+
+function condensate_specific_humidity(T, q, ref, thermo)
+    q★ = saturation_specific_humidity(T, ref, thermo)
+    return max(0, q - q★)
 end
 
 # Solve
-# θ = T/Π ( 1 - ℒ max(0, q - q★) / (cᵖᵐ T))
+# θ = T/Π ( 1 - ℒ qℓ / (cᵖᵐ T))
+# for temperature T.
 # root of: f(T) = T² - Π θ T - ℒ max(0, q - q★) / cᵖᵐ
-@inline function temperature(prog::MoistState{FT}, ref, thermo::AT) where FT
+@inline function compute_temperature(state::ThermodynamicState{FT}, ref, thermo) where FT
     # Generate guess for unsaturated conditions
-    Π = exner_function(prog, ref, thermo)
-    T₁ = Π * prog.θ
-    q★ = saturation_specific_humidity(T₁, prog.ρ, thermo)
-    prog.q < q★ && return T₁
+    Π = exner_function(state, ref, thermo)
+    T₁ = Π * state.θ
+    qˡ₁ = condensate_specific_humidity(T₁, state.q, ref, thermo)
+    qˡ₁ <= 0 && return T₁
 
-    # Generate guess for saturated conditions
+    # If we're here, we have condensation
+    r₁ = adjustment_residual(T₁, Π, qˡ₁, state, thermo)
+
     ℒ = thermo.condensation.reference_vaporization_enthalpy
-    cᵖᵐ = heat_capacity(prog.q, thermo)
-    qℓ⁺ = 1e-4 #max(0, prog.q - q★)
-    T₂ = T₁ + 1e-2 #sqrt(T₁^2 + 4 * ℒ * qℓ⁺ / cᵖᵐ) / 2
+    cᵖᵐ = mixture_heat_capacity(state.q, thermo)
+    T₂ = (T₁ + sqrt(T₁^2 - 4 * ℒ * qˡ₁ / cᵖᵐ)) / 2
+    qˡ₂ = condensate_specific_humidity(T₂, state.q, ref, thermo)
 
-    r₁ = adjustment_residual(T₁, Π, prog, thermo)
-    r₂ = adjustment_residual(T₂, Π, prog, thermo)
+    r₂ = adjustment_residual(T₂, Π, qˡ₂, state, thermo)
 
-    for i = 1:2
+    while r₂ > 1e-4
         # Compute slope
-        dTdr = (T₂ - T₁) / (r₂ - r₁)
+        ΔTΔr = (T₂ - T₁) / (r₂ - r₁)
         # Store
         r₁ = r₂
-        T₁ = r₂
+        T₁ = T₂
         # Update
-        T₂ += r₂ * dTdr
-        r₂ = adjustment_residual(T₂, Π, prog, thermo)
+        T₂ -= r₂ * ΔTΔr
+        qˡ₂ = condensate_specific_humidity(T₂, state.q, ref, thermo)
+        r₂ = adjustment_residual(T₂, Π, qˡ₂, state, thermo)
     end
 
     return T₂
 end
 
-@inline function adjustment_residual(T, Π, prog, thermo)
-    q★ = saturation_specific_humidity(T, prog.ρ, thermo)
+@inline function adjustment_residual(T, Π, qˡ, state, thermo)
     ℒ = thermo.condensation.reference_vaporization_enthalpy
-    cᵖᵐ = heat_capacity(prog.q, thermo)
-    return T^2 - Π * prog.θ * T - ℒ * max(0, prog.q - q★) / cᵖᵐ
+    cᵖᵐ = mixture_heat_capacity(state.q, thermo)
+    return T^2 - ℒ * qˡ / cᵖᵐ - Π * state.θ * T
 end
