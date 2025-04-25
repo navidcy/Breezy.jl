@@ -1,4 +1,5 @@
 using JLD2
+using AquaSkyLES
 using AquaSkyLES: density, saturation_specific_humidity, MoistAuxiliaryState, AtmosphereThermodynamics
 using GLMakie
 
@@ -6,8 +7,28 @@ using GLMakie
 
 thermo = AtmosphereThermodynamics()
 
-A = @. MoistAuxiliaryState(p, T, q)
-ρ = density.(A, Ref(thermo))
-q★ = saturation_specific_humidity.(A, Ref(thermo))
+ρ = density.(T, p, q, Ref(thermo))
+q★ = saturation_specific_humidity.(T, 1.2, Ref(thermo))
+ql = @. max(0, q - q★)
 
-scatter(q★, T, color=ρ, colormap=:blues)
+fig = Figure(size=(1200, 600))
+ax1 = Axis(fig[1, 2], title="Temperature")
+ax2 = Axis(fig[2, 1], title="Saturation specific humidity")
+ax3 = Axis(fig[1, 1], title="Total specific humidity")
+ax4 = Axis(fig[2, 2], title="Liquid specific humidity")
+heatmap!(ax1, T, colormap=:magma)
+heatmap!(ax2, q★)
+heatmap!(ax3, q, colormap=:grays)
+heatmap!(ax4, ql, colormap=:grays, colorrange=(0, 0.001))
+display(fig)
+
+# Compute cloudiness for instantaneous drop
+θ⁻ = T .- 2
+Ψ = AquaSkyLES.MoistState{Float64}.(ρ, θ⁻, q, 0)
+ℛ = AquaSkyLES.ReferenceState{Float64}(101325, 20)
+T⁻ = AquaSkyLES.temperature.(Ψ, Ref(ℛ), Ref(thermo))
+Π = AquaSkyLES.exner_function.(Ψ, Ref(ℛ), Ref(thermo))
+Tu = @. Π * θ⁻
+ΔT = T⁻ - Tu
+
+heatmap!(ax1, ΔT, colormap=:magma)
