@@ -174,6 +174,14 @@ struct ReferenceState{FT}
     θ :: FT  # constant reference potential temperature
 end
 
+function ReferenceState(FT = Oceananigans.defaults.FloatType;
+                        base_pressure = 101325,
+                        potential_temperature = 288)
+
+    return ReferenceState{FT}(convert(FT, base_pressure),
+                              convert(FT, potential_temperature))
+end
+
 """
     reference_density(ref, thermo)
 

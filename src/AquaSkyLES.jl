@@ -41,7 +41,6 @@ required_tracers(::UnsaturatedMoistAirBuoyancy) = (:θ, :q)
     return β * (θᵥ - θ₀)
 end
 
-
 struct MoistAirBuoyancy{FT} <: AbstractBuoyancyFormulation{Nothing}
     thermodynamics :: AtmosphereThermodynamics{FT}
     reference_state :: ReferenceState{FT}
@@ -55,6 +54,13 @@ function MoistAirBuoyancy(FT=Oceananigans.defaults.FloatType;
 end
 
 required_tracers(::MoistAirBuoyancy) = (:θ, :q)
+
+reference_density(z, mb::MoistAirBuoyancy) = reference_density(z, mb.reference_state, mb.thermodynamics)
+base_density(mb::MoistAirBuoyancy) = base_density(mb.reference_state, mb.thermodynamics)
+
+#####
+##### 
+#####
 
 const c = Center()
 

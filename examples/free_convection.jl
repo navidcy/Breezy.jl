@@ -7,30 +7,32 @@ Nx = Nz = 128
 Lz = 4 * 1024
 grid = RectilinearGrid(size=(Nx, Nz), x=(0, 2Lz), z=(0, Lz), topology=(Periodic, Flat, Bounded))
 
-ρ₀ = 1   # air density
-cₚ = 1e3 # air specific heat
-Q = 1000 # heat flux in W / m²
-Jθ = Q / (ρ₀ * cₚ)
-heating = FluxBoundaryCondition(Jθ)
-θ_bcs = FieldBoundaryConditions(bottom=heating)
+p₀ = 101325 # Pa
+θ₀ = 288 # K
+reference_state = AquaSkyLES.ReferenceState(base_pressure=p₀, potential_temperature=θ₀)
+buoyancy = AquaSkyLES.MoistAirBuoyancy(; reference_state)
 
-evaporation = FluxBoundaryCondition(1e-3)
-q_bcs = FieldBoundaryConditions(bottom=evaporation)
+ρ₀ = AquaSkyLES.base_density(buoyancy) # air density at z=0
+cₚ = buoyancy.thermodynamics.dry_air.heat_capacity
+Q₀ = 1000 # heat flux in W / m²
+Jθ = Q₀ / (ρ₀ * cₚ) # temperature flux
+θ_bcs = FieldBoundaryConditions(bottom=FluxBoundaryCondition(Jθ))
+
+vapor_flux = FluxBoundaryCondition(1e-3)
+q_bcs = FieldBoundaryConditions(bottom=vapor_flux)
 
 advection = WENO() #(momentum=WENO(), θ=WENO(), q=WENO(bounds=(0, 1)))
 tracers = (:θ, :q)
-buoyancy = AquaSkyLES.MoistAirBuoyancy()
-model = NonhydrostaticModel(; grid, advection, tracers, buoyancy,
-                            boundary_conditions=(; θ=θ_bcs, q=q_bcs))
+model = NonhydrostaticModel(; grid, advection, buoyancy,
+                            tracers = (:θ, :q),
+                            boundary_conditions = (θ=θ_bcs, q=q_bcs))
 
 Lz = grid.Lz
-Δθ = 5 # ᵒC
-Tₛ = 288 # ᵒC
+Δθ = 5 # K
+Tₛ = reference_state.θ # K
 θᵢ(x, z) = Tₛ + Δθ * z / Lz + 1e-2 * Δθ * randn()
 qᵢ(x, z) = 1e-2 + 1e-5 * rand()
 set!(model, θ=θᵢ, q=qᵢ)
-
-@show model.tracers.θ
 
 simulation = Simulation(model, Δt=10, stop_time=2hours)
 conjure_time_step_wizard!(simulation, cfl=0.7)
