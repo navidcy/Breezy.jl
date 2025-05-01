@@ -1,14 +1,14 @@
 struct IdealGas{FT}
     molar_mass :: FT
-    isentropic_exponent :: FT # κ = γ / (γ - 1)
+    heat_capacity :: FT # specific heat capacity at constant pressure
 end
 
 function IdealGas(FT = Oceananigans.defaults.FloatType;
                   molar_mass = 0.02897,
-                  isentropic_exponent = 2/7)
+                  heat_capacity = 1005)
 
     return IdealGas{FT}(convert(FT, molar_mass),
-                        convert(FT, isentropic_exponent))
+                        convert(FT, heat_capacity))
 end
 
 struct Condensation{FT}
@@ -59,16 +59,16 @@ function AtmosphereThermodynamics(FT = Oceananigans.defaults.FloatType;
                                   gravitational_acceleration = 9.81,
                                   molar_gas_constant = 8.314462618,
                                   dry_air_molar_mass = 0.02897,
-                                  dry_air_isentropic_exponent = 2/7,
+                                  dry_air_heat_capacity = 1005,
                                   vapor_molar_mass = 0.018015,
-                                  vapor_isentropic_exponent = 4.03,
+                                  vapor_heat_capacity = 1850,
                                   condensation = Condensation(FT))
 
     dry_air = IdealGas(FT; molar_mass = dry_air_molar_mass,
-                           isentropic_exponent = dry_air_isentropic_exponent)
+                           heat_capacity = dry_air_heat_capacity)
 
     vapor = IdealGas(FT; molar_mass = vapor_molar_mass,
-                         isentropic_exponent = vapor_isentropic_exponent)
+                         heat_capacity = vapor_heat_capacity)
 
     return AtmosphereThermodynamics(convert(FT, molar_gas_constant),
                                     convert(FT, gravitational_acceleration),
@@ -82,9 +82,6 @@ end
 const AT = AtmosphereThermodynamics
 const IG = IdealGas
 
-@inline gas_heat_capacity(R, ig::IG)      = ig.isentropic_exponent * R / ig.molar_mass
-@inline dry_air_heat_capacity(thermo::AT) = gas_heat_capacity(thermo.molar_gas_constant, thermo.dry_air)
-@inline vapor_heat_capacity(thermo::AT)   = gas_heat_capacity(thermo.molar_gas_constant, thermo.vapor)
 @inline vapor_gas_constant(thermo::AT)    = thermo.molar_gas_constant / thermo.vapor.molar_mass
 @inline dry_air_gas_constant(thermo::AT)  = thermo.molar_gas_constant / thermo.dry_air.molar_mass
 
@@ -106,7 +103,7 @@ dp/dT = ℒᵛ / (Rᵛ T^2)
     Tᵗʳ = thermo.condensation.triple_point_temperature
     pᵗʳ = thermo.condensation.triple_point_pressure
     cᵖˡ = thermo.condensation.liquid_heat_capacity
-    cᵖᵛ = vapor_heat_capacity(thermo)
+    cᵖᵛ = thermo.vapor.heat_capacity
     Rᵛ  = vapor_gas_constant(thermo)
     Δcᵖ = cᵖˡ - cᵖᵛ
     Δϰ = Δcᵖ / Rᵛ
@@ -134,8 +131,8 @@ and assuming that condensate mass ratio qℓ ≪ q, where qℓ is the mass ratio
 liquid condensate.
 """
 @inline function mixture_heat_capacity(q, thermo::AT)
-    cᵖᵈ = dry_air_heat_capacity(thermo)
-    cᵖᵛ = vapor_heat_capacity(thermo)
+    cᵖᵈ = thermo.dry_air.heat_capacity
+    cᵖᵛ = thermo.vapor.heat_capacity
     return cᵖᵈ * (1 - q) + cᵖᵛ * q
 end
 
@@ -201,11 +198,11 @@ end
 end
 
 @inline function reference_pressure(z, ref, thermo)
-    cᵖᵈ = dry_air_heat_capacity(thermo)
+    cᵖᵈ = thermo.dry_air.heat_capacity
     Rᵈ = dry_air_gas_constant(thermo)
-    ϰᵈ = thermo.dry_air.isentropic_exponent
+    ϰᵈ⁻¹ = Rᵈ / cᵖᵈ
     g = thermo.gravitational_acceleration
-    return ref.p₀ * (1 - g * z / (cᵖᵈ * ref.θ))^ϰᵈ
+    return ref.p₀ * (1 - g * z / (cᵖᵈ * ref.θ))^ϰᵈ⁻¹
 end
 
 @inline function saturation_specific_humidity(T, z, ref::ReferenceState, thermo)
@@ -225,9 +222,12 @@ end
 ##### Saturation adjustment
 #####
 
-function condensate_specific_humidity(T, state, ref, thermo)
-    qᵛ★ = saturation_specific_humidity(T, state.z, ref, thermo)
-    return max(0, state.q - qᵛ★)
+condensate_specific_humidity(T, state, ref, thermo) =
+    condensate_specific_humidity(T, state.q, state.z, ref, thermo)
+
+function condensate_specific_humidity(T, q, z, ref, thermo)
+    qᵛ★ = saturation_specific_humidity(T, z, ref, thermo)
+    return max(0, q - qᵛ★)
 end
 
 # Solve
@@ -235,13 +235,15 @@ end
 # for temperature T with qˡ = max(0, q - qᵛ★).
 # root of: f(T) = T² - Π θ T - ℒ qˡ / cᵖᵐ
 @inline function temperature(state::ThermodynamicState{FT}, ref, thermo) where FT
+    state.θ == 0 && return zero(FT)
+
     # Generate guess for unsaturated conditions
     Π = exner_function(state, ref, thermo)
     T₁ = Π * state.θ
     qˡ₁ = condensate_specific_humidity(T₁, state, ref, thermo)
     qˡ₁ <= 0 && return T₁
 
-    # If we're here, we have condensation
+    # If we made it this far, we have condensation
     r₁ = adjustment_residual(T₁, Π, qˡ₁, state, thermo)
 
     ℒ = thermo.condensation.reference_vaporization_enthalpy
@@ -249,9 +251,14 @@ end
     T₂ = (T₁ + sqrt(T₁^2 + 4 * ℒ * qˡ₁ / cᵖᵐ)) / 2
     qˡ₂ = condensate_specific_humidity(T₂, state, ref, thermo)
     r₂ = adjustment_residual(T₂, Π, qˡ₂, state, thermo)
-    ΔT = T₂ - T₁
 
-    while abs(ΔT) < 1e-2
+    # Saturation adjustment
+    R = sqrt(max(T₂, T₁))
+    ϵ = convert(FT, 1e-4)
+    δ = ϵ * R 
+    iter = 0
+
+    while abs(r₂ - r₁) > δ
         # Compute slope
         ΔTΔr = (T₂ - T₁) / (r₂ - r₁)
 
@@ -263,7 +270,7 @@ end
         T₂ -= r₂ * ΔTΔr
         qˡ₂ = condensate_specific_humidity(T₂, state, ref, thermo)
         r₂ = adjustment_residual(T₂, Π, qˡ₂, state, thermo)
-        ΔT = T₂ - T₁
+        iter += 1
     end
 
     return T₂
