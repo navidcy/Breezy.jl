@@ -22,10 +22,10 @@ ax4 = Axis(fig[2, 2], title="Liquid specific humidity")
 # heatmap!(ax4, qˡ, colormap=:grays, colorrange=(0, 0.001))
 
 # Compute cloudiness for instantaneous drop
-θ⁻ = T .- 2
+θ⁻ = T .- 10
 Ψ = AquaSkyLES.ThermodynamicState{Float64}.(θ⁻, q, 0)
 ℛ = AquaSkyLES.ReferenceState{Float64}(101325, 20)
-T⁻ = AquaSkyLES.compute_temperature.(Ψ, Ref(ℛ), Ref(thermo))
+T⁻ = AquaSkyLES.temperature.(Ψ, Ref(ℛ), Ref(thermo))
 qᵛ★ = saturation_specific_humidity.(T⁻, 1.2, Ref(thermo))
 qˡ = @. max(0, q - qᵛ★)
 Π = AquaSkyLES.exner_function.(Ψ, Ref(ℛ), Ref(thermo))
@@ -35,5 +35,5 @@ Tu = @. Π * θ⁻
 heatmap!(ax1, ΔT, colormap=:magma)
 heatmap!(ax2, qᵛ★)
 heatmap!(ax3, q, colormap=:grays)
-heatmap!(ax4, qˡ, colormap=:grays, colorrange=(0, 0.001))
+heatmap!(ax4, qˡ, colormap=:grays, colorrange=(0, 0.01))
 display(fig)

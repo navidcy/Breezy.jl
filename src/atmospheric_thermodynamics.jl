@@ -90,17 +90,27 @@ const IG = IdealGas
 
 const NonCondensingAtmosphereThermodynamics{FT} = AtmosphereThermodynamics{FT, Nothing} 
 
-@inline function saturation_vapor_pressure(T, thermodynamics_constants)
-    ℒ₀  = thermodynamics_constants.condensation.reference_vaporization_enthalpy
-    T₀  = thermodynamics_constants.condensation.energy_reference_temperature
-    Tᵗʳ = thermodynamics_constants.condensation.triple_point_temperature
-    pᵗʳ = thermodynamics_constants.condensation.triple_point_pressure
-    cᵖℓ = thermodynamics_constants.condensation.liquid_heat_capacity
-    cᵖv = vapor_heat_capacity(thermodynamics_constants)
-    Rᵛ  = vapor_gas_constant(thermodynamics_constants)
-    Δc  = cᵖℓ - cᵖv
-    # T = max(T, Tᵗʳ)
-    return pᵗʳ * (T / Tᵗʳ)^(Δc / Rᵛ) * exp((ℒ₀ - Δc * T₀) * (1/Tᵗʳ - 1/T) / Rᵛ)
+"""
+    saturation_vapor_pressure(T, thermo)
+
+Compute the saturation vapor pressure over a liquid surface by integrating
+the Clausius-Clapeyron relation,
+
+```math
+dp/dT = ℒᵛ / (Rᵛ T^2)
+```
+"""
+@inline function saturation_vapor_pressure(T, thermo)
+    ℒ₀  = thermo.condensation.reference_vaporization_enthalpy
+    T₀  = thermo.condensation.energy_reference_temperature
+    Tᵗʳ = thermo.condensation.triple_point_temperature
+    pᵗʳ = thermo.condensation.triple_point_pressure
+    cᵖˡ = thermo.condensation.liquid_heat_capacity
+    cᵖᵛ = vapor_heat_capacity(thermo)
+    Rᵛ  = vapor_gas_constant(thermo)
+    Δcᵖ = cᵖˡ - cᵖᵛ
+    Δϰ = Δcᵖ / Rᵛ
+    return pᵗʳ * (T / Tᵗʳ)^Δϰ * exp((ℒ₀ - Δcᵖ * T₀) * (1/Tᵗʳ - 1/T) / Rᵛ)
 end
 
 # Over a liquid surface
@@ -163,7 +173,7 @@ struct ThermodynamicState{FT}
 end
 
 struct ReferenceState{FT}
-    p₀ :: FT # reference pressure at z=0
+    p₀ :: FT # base pressure: reference pressure at z=0
     θ :: FT  # constant reference potential temperature
 end
 
@@ -173,9 +183,21 @@ end
 Compute the reference density associated with the reference pressure and potential temperature.
 The reference density is defined as the density of dry air at the reference pressure and temperature.
 """
-@inline function reference_density(ref, thermo)
+@inline function reference_density(z, ref, thermo)
+    Rᵈ = dry_air_gas_constant(thermo)
+    p = reference_pressure(z, ref, thermo)
+    return p / (Rᵈ * ref.θ)
+end
+
+@inline function base_density(ref, thermo)
     Rᵈ = dry_air_gas_constant(thermo)
     return ref.p₀ / (Rᵈ * ref.θ)
+end
+
+@inline function reference_specific_volume(z, ref, thermo)
+    Rᵈ = dry_air_gas_constant(thermo)
+    p = reference_pressure(z, ref, thermo)
+    return Rᵈ * ref.θ / p
 end
 
 @inline function reference_pressure(z, ref, thermo)
@@ -186,9 +208,9 @@ end
     return ref.p₀ * (1 - g * z / (cᵖᵈ * ref.θ))^ϰᵈ
 end
 
-@inline function saturation_specific_humidity(T, ref::ReferenceState, thermo)
-    ρ₀ = reference_density(ref, thermo)
-    return saturation_specific_humidity(T, ρ₀, thermo)
+@inline function saturation_specific_humidity(T, z, ref::ReferenceState, thermo)
+    ρ = reference_density(z, ref, thermo)
+    return saturation_specific_humidity(T, ρ, thermo)
 end
 
 @inline function exner_function(state, ref, thermo)
@@ -199,20 +221,24 @@ end
     return (pᵣ / ref.p₀)^inv_ϰᵐ
 end
 
-function condensate_specific_humidity(T, q, ref, thermo)
-    q★ = saturation_specific_humidity(T, ref, thermo)
-    return max(0, q - q★)
+#####
+##### Saturation adjustment
+#####
+
+function condensate_specific_humidity(T, state, ref, thermo)
+    qᵛ★ = saturation_specific_humidity(T, state.z, ref, thermo)
+    return max(0, state.q - qᵛ★)
 end
 
 # Solve
-# θ = T/Π ( 1 - ℒ qℓ / (cᵖᵐ T))
-# for temperature T.
-# root of: f(T) = T² - Π θ T - ℒ max(0, q - q★) / cᵖᵐ
-@inline function compute_temperature(state::ThermodynamicState{FT}, ref, thermo) where FT
+# θ = T/Π ( 1 - ℒ qˡ / (cᵖᵐ T))
+# for temperature T with qˡ = max(0, q - qᵛ★).
+# root of: f(T) = T² - Π θ T - ℒ qˡ / cᵖᵐ
+@inline function temperature(state::ThermodynamicState{FT}, ref, thermo) where FT
     # Generate guess for unsaturated conditions
     Π = exner_function(state, ref, thermo)
     T₁ = Π * state.θ
-    qˡ₁ = condensate_specific_humidity(T₁, state.q, ref, thermo)
+    qˡ₁ = condensate_specific_humidity(T₁, state, ref, thermo)
     qˡ₁ <= 0 && return T₁
 
     # If we're here, we have condensation
@@ -220,21 +246,24 @@ end
 
     ℒ = thermo.condensation.reference_vaporization_enthalpy
     cᵖᵐ = mixture_heat_capacity(state.q, thermo)
-    T₂ = (T₁ + sqrt(T₁^2 - 4 * ℒ * qˡ₁ / cᵖᵐ)) / 2
-    qˡ₂ = condensate_specific_humidity(T₂, state.q, ref, thermo)
-
+    T₂ = (T₁ + sqrt(T₁^2 + 4 * ℒ * qˡ₁ / cᵖᵐ)) / 2
+    qˡ₂ = condensate_specific_humidity(T₂, state, ref, thermo)
     r₂ = adjustment_residual(T₂, Π, qˡ₂, state, thermo)
+    ΔT = T₂ - T₁
 
-    while r₂ > 1e-4
+    while abs(ΔT) < 1e-2
         # Compute slope
         ΔTΔr = (T₂ - T₁) / (r₂ - r₁)
-        # Store
+
+        # Store previous values
         r₁ = r₂
         T₁ = T₂
+
         # Update
         T₂ -= r₂ * ΔTΔr
-        qˡ₂ = condensate_specific_humidity(T₂, state.q, ref, thermo)
+        qˡ₂ = condensate_specific_humidity(T₂, state, ref, thermo)
         r₂ = adjustment_residual(T₂, Π, qˡ₂, state, thermo)
+        ΔT = T₂ - T₁
     end
 
     return T₂
@@ -244,4 +273,11 @@ end
     ℒ = thermo.condensation.reference_vaporization_enthalpy
     cᵖᵐ = mixture_heat_capacity(state.q, thermo)
     return T^2 - ℒ * qˡ / cᵖᵐ - Π * state.θ * T
+end
+
+@inline function specific_volume(state, ref, thermo)
+    T = temperature(state, ref, thermo)
+    Rᵐ = mixture_gas_number(state.q, thermo)
+    pʳ = reference_pressure(state.z, ref, thermo)
+    return Rᵐ * T / pʳ
 end

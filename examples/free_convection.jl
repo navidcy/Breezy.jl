@@ -18,6 +18,7 @@ tracers = (:θ, :q)
 buoyancy = AquaSkyLES.MoistAirBuoyancy()
 model = NonhydrostaticModel(; grid, advection, tracers, buoyancy, boundary_conditions=(; θ=θ_bcs))
 
+#=
 Lz = grid.Lz
 Δθ = 10 # ᵒC
 Tₛ = 20 # ᵒC
@@ -72,3 +73,5 @@ fig
 record(fig, "free_convection.mp4", 1:Nt, framerate=12) do nn
     n[] = nn
 end
+
+=#
