@@ -11,34 +11,99 @@ function IdealGas(FT = Oceananigans.defaults.FloatType;
                         convert(FT, heat_capacity))
 end
 
-struct Condensation{FT}
-    reference_vaporization_enthalpy :: FT
+struct Saturation{FT}
     energy_reference_temperature :: FT
     triple_point_temperature :: FT
     triple_point_pressure :: FT
-    liquid_heat_capacity :: FT
 end
 
-function Condensation(FT = Oceananigans.defaults.FloatType;
-                      reference_vaporization_enthalpy = 2500800,
-                      energy_reference_temperature = 273.16,
-                      liquid_heat_capacity = 4181,
-                      triple_point_temperature = 273.16,
-                      triple_point_pressure = 611.657)
+"""
+    Saturation(FT = Oceananigans.defaults.FloatType;
+               energy_reference_temperature,
+               triple_point_temperature,
+               triple_point_pressure)
 
-    return Condensation{FT}(convert(FT, reference_vaporization_enthalpy),
-                            convert(FT, energy_reference_temperature),
-                            convert(FT, triple_point_temperature),
-                            convert(FT, triple_point_pressure),
-                            convert(FT, liquid_heat_capacity))
+Returns `Saturation` with specified parameters converted to `FT`.
+
+The `Saturation` struct contains reference values used in the Clausius-Clapeyron relation to calculate
+saturation vapor pressure. The Clausius-Clapeyron equation describes how the saturation vapor pressure
+changes with temperature for a liquid-vapor phase transition:
+
+The Clausius-Clapeyron relation describes the pressure-temperature relationship during phase transitions:
+
+```math
+    d/dT log(p_sat) = L / (Rv * T²)
+```
+where:
+
+- p_sat is the saturation vapor pressure
+- T is temperature 
+- L is the latent heat of vaporization
+- R_v is the gas constant for water vapor
+
+For water vapor, this integrates to:
+
+    ln(p_sat/p_triple) = (L/R_v) * (1/T_triple - 1/T)
+
+or equivalently:
+
+    p_sat = p_triple * exp((L/R_v) * (1/T_triple - 1/T))
+
+where:
+- p_triple is the triple point pressure
+- T_triple is the triple point temperature
+
+This relation is used to calculate saturation vapor pressure, which determines the maximum possible
+water vapor content of air at a given temperature and pressure.
+"""
+function Saturation(FT = Oceananigans.defaults.FloatType;
+                    energy_reference_temperature = 273.16,
+                    triple_point_temperature = 273.16,
+                    triple_point_pressure = 611.657)
+
+    return Saturation{FT}(convert(FT, energy_reference_temperature),
+                          convert(FT, triple_point_temperature), 
+                          convert(FT, triple_point_pressure))
 end
 
-struct AtmosphereThermodynamics{FT, C}
+struct PhaseTransition{FT}
+    latent_heat :: FT
+    heat_capacity :: FT
+end
+
+"""
+    PhaseTransition(FT = Oceananigans.defaults.FloatType; latent_heat, heat_capacity)
+
+Returns `PhaseTransition` with specified parameters converted to `FT`.
+
+Two examples of `PhaseTransition` are condensation and deposition.
+During condensation, water molecules in the gas phase cluster together and slow down to form liquid with `heat_capacity`,
+The lost of molecular kinetic energy is called the `latent_heat`.
+
+Likewise, during deposition, water molecules in the gas phase cluster into ice crystals.
+
+Arguments
+=========
+- `FT`: Float type to use (defaults to Oceananigans.defaults.FloatType)
+- `latent_heat`: Latent heat lost during phase transition from the gaseous state.
+- `heat_capacity`: Heat capacity of the transitional phase.
+"""
+function PhaseTransition(FT = Oceananigans.defaults.FloatType; latent_heat, heat_capacity)
+    return PhaseTransition{FT}(convert(FT, latent_heat),
+                               convert(FT, heat_capacity))
+end
+
+water_condensation(FT) = PhaseTransition(FT; latent_heat=2500800, heat_capacity=4181)
+water_deposition(FT)   = PhaseTransition(FT; latent_heat=2834000, heat_capacity=2108)
+
+struct AtmosphereThermodynamics{FT, S, C, F}
     molar_gas_constant :: FT
     gravitational_acceleration :: FT
     dry_air :: IdealGas{FT}
     vapor :: IdealGas{FT}
+    saturation :: S
     condensation :: C
+    deposition :: F
 end
 
 """
@@ -46,10 +111,12 @@ end
                              gravitational_acceleration = 9.81,
                              molar_gas_constant = 8.314462618,
                              dry_air_molar_mass = 0.02897,
-                             dry_air_isentropic_exponent = 2/7,
+                             dry_air_heat_capacity = 1005,
                              vapor_molar_mass = 0.018015,
-                             vapor_isentropic_exponent = 4.03,
-                             condensation = nothing)
+                             vapor_heat_capacity = 1850,
+                             saturation = Saturation(FT),
+                             condensation = water_condensation(FT),
+                             deposition = water_deposition(FT))
 
 Create `AtmosphereThermodynamics` with parameters that correpsond to the composition of dry air
 in Earth's atmosphere and water vapor. The default `isnothing(condensation)` implies thermodynamics
@@ -62,7 +129,9 @@ function AtmosphereThermodynamics(FT = Oceananigans.defaults.FloatType;
                                   dry_air_heat_capacity = 1005,
                                   vapor_molar_mass = 0.018015,
                                   vapor_heat_capacity = 1850,
-                                  condensation = Condensation(FT))
+                                  saturation = Saturation(FT),
+                                  condensation = water_condensation(FT),
+                                  deposition = water_deposition(FT))
 
     dry_air = IdealGas(FT; molar_mass = dry_air_molar_mass,
                            heat_capacity = dry_air_heat_capacity)
@@ -72,7 +141,7 @@ function AtmosphereThermodynamics(FT = Oceananigans.defaults.FloatType;
 
     return AtmosphereThermodynamics(convert(FT, molar_gas_constant),
                                     convert(FT, gravitational_acceleration),
-                                    dry_air, vapor, condensation)
+                                    dry_air, vapor, saturation, condensation, deposition)
 end
 
 #####
@@ -97,27 +166,29 @@ the Clausius-Clapeyron relation,
 dp/dT = ℒᵛ / (Rᵛ T^2)
 ```
 """
-@inline function saturation_vapor_pressure(T, thermo)
-    ℒ₀  = thermo.condensation.reference_vaporization_enthalpy
-    T₀  = thermo.condensation.energy_reference_temperature
-    Tᵗʳ = thermo.condensation.triple_point_temperature
-    pᵗʳ = thermo.condensation.triple_point_pressure
-    cᵖˡ = thermo.condensation.liquid_heat_capacity
+@inline function saturation_vapor_pressure(T, thermo, phase_transition::PhaseTransition)
+    ℒ₀  = phase_transition.latent_heat
+    cᵖˡ = phase_transition.heat_capacity
+    T₀  = thermo.saturation.energy_reference_temperature
+    Tᵗʳ = thermo.saturation.triple_point_temperature
+    pᵗʳ = thermo.saturation.triple_point_pressure
     cᵖᵛ = thermo.vapor.heat_capacity
     Rᵛ  = vapor_gas_constant(thermo)
+
     Δcᵖ = cᵖˡ - cᵖᵛ
     Δϰ = Δcᵖ / Rᵛ
+
     return pᵗʳ * (T / Tᵗʳ)^Δϰ * exp((ℒ₀ - Δcᵖ * T₀) * (1/Tᵗʳ - 1/T) / Rᵛ)
 end
 
 # Over a liquid surface
-@inline function saturation_specific_humidity(T, ρ, thermo)
-    p★ = saturation_vapor_pressure(T, thermo)
+@inline function saturation_specific_humidity(T, ρ, thermo, phase_transition::PhaseTransition)
+    p★ = saturation_vapor_pressure(T, thermo, phase_transition)
     Rᵛ = vapor_gas_constant(thermo)
     return p★ / (ρ * Rᵛ * T)
 end
 
-@inline function mixture_gas_number(q, thermo::AT)
+@inline function mixture_gas_constant(q, thermo::AT)
     Rᵈ = dry_air_gas_constant(thermo)   
     Rᵛ = vapor_gas_constant(thermo)   
     return Rᵈ * (1 - q) + Rᵛ * q
@@ -127,7 +198,7 @@ end
     mixture_heat_capacity(q, thermo)
 
 Compute the heat capacity of state air given the total specific humidity q
-and assuming that condensate mass ratio qℓ ≪ q, where qℓ is the mass ratio of
+and assuming that condensate mass ratio qᶜ ≪ q, where qℓ is the mass ratio of
 liquid condensate.
 """
 @inline function mixture_heat_capacity(q, thermo::AT)
@@ -155,7 +226,7 @@ end
     return cᵖᵈ * (1 - qᵗ) + cᵖᵛ * qᵛ + cᵖˡ * qˡ
 end
 
-@inline function mixture_gas_number(q::WarmCondensate, thermo::AT)
+@inline function mixture_gas_constant(q::WarmCondensate, thermo::AT)
 =#
 
 #####
@@ -213,86 +284,28 @@ end
     return ref.p₀ * (1 - g * z / (cᵖᵈ * ref.θ))^ϰᵈ⁻¹
 end
 
-@inline function saturation_specific_humidity(T, z, ref::ReferenceState, thermo)
+@inline function saturation_specific_humidity(T, z, ref::ReferenceState, thermo, phase_transition)
     ρ = reference_density(z, ref, thermo)
-    return saturation_specific_humidity(T, ρ, thermo)
+    return saturation_specific_humidity(T, ρ, thermo, phase_transition)
 end
 
 @inline function exner_function(state, ref, thermo)
-    Rᵐ = mixture_gas_number(state.q, thermo)
+    Rᵐ = mixture_gas_constant(state.q, thermo)
     cᵖᵐ = mixture_heat_capacity(state.q, thermo)
     inv_ϰᵐ = Rᵐ / cᵖᵐ
     pᵣ = reference_pressure(state.z, ref, thermo)
     return (pᵣ / ref.p₀)^inv_ϰᵐ
 end
 
-#####
-##### Saturation adjustment
-#####
-
 condensate_specific_humidity(T, state, ref, thermo) =
     condensate_specific_humidity(T, state.q, state.z, ref, thermo)
 
 function condensate_specific_humidity(T, q, z, ref, thermo)
-    qᵛ★ = saturation_specific_humidity(T, z, ref, thermo)
+    qᵛ★ = saturation_specific_humidity(T, z, ref, thermo, thermo.condensation)
     return max(0, q - qᵛ★)
 end
 
-# Solve
-# θ = T/Π ( 1 - ℒ qˡ / (cᵖᵐ T))
-# for temperature T with qˡ = max(0, q - qᵛ★).
-# root of: f(T) = T² - Π θ T - ℒ qˡ / cᵖᵐ
-@inline function temperature(state::ThermodynamicState{FT}, ref, thermo) where FT
-    state.θ == 0 && return zero(FT)
-
-    # Generate guess for unsaturated conditions
-    Π = exner_function(state, ref, thermo)
-    T₁ = Π * state.θ
-    qˡ₁ = condensate_specific_humidity(T₁, state, ref, thermo)
-    qˡ₁ <= 0 && return T₁
-
-    # If we made it this far, we have condensation
-    r₁ = adjustment_residual(T₁, Π, qˡ₁, state, thermo)
-
-    ℒ = thermo.condensation.reference_vaporization_enthalpy
-    cᵖᵐ = mixture_heat_capacity(state.q, thermo)
-    T₂ = (T₁ + sqrt(T₁^2 + 4 * ℒ * qˡ₁ / cᵖᵐ)) / 2
-    qˡ₂ = condensate_specific_humidity(T₂, state, ref, thermo)
-    r₂ = adjustment_residual(T₂, Π, qˡ₂, state, thermo)
-
-    # Saturation adjustment
-    R = sqrt(max(T₂, T₁))
-    ϵ = convert(FT, 1e-4)
-    δ = ϵ * R 
-    iter = 0
-
-    while abs(r₂ - r₁) > δ
-        # Compute slope
-        ΔTΔr = (T₂ - T₁) / (r₂ - r₁)
-
-        # Store previous values
-        r₁ = r₂
-        T₁ = T₂
-
-        # Update
-        T₂ -= r₂ * ΔTΔr
-        qˡ₂ = condensate_specific_humidity(T₂, state, ref, thermo)
-        r₂ = adjustment_residual(T₂, Π, qˡ₂, state, thermo)
-        iter += 1
-    end
-
-    return T₂
-end
-
-@inline function adjustment_residual(T, Π, qˡ, state, thermo)
-    ℒ = thermo.condensation.reference_vaporization_enthalpy
-    cᵖᵐ = mixture_heat_capacity(state.q, thermo)
-    return T^2 - ℒ * qˡ / cᵖᵐ - Π * state.θ * T
-end
-
-@inline function specific_volume(state, ref, thermo)
-    T = temperature(state, ref, thermo)
-    Rᵐ = mixture_gas_number(state.q, thermo)
-    pʳ = reference_pressure(state.z, ref, thermo)
-    return Rᵐ * T / pʳ
+function ice_specific_humidity(T, q, z, ref, thermo)
+    qi★ = saturation_specific_humidity(T, z, ref, thermo, thermo.deposition)
+    return max(0, q - qi★)
 end

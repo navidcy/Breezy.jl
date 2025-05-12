@@ -11,6 +11,7 @@ import Oceananigans.BuoyancyFormulations: AbstractBuoyancyFormulation,
                                           required_tracers
 
 include("atmospheric_thermodynamics.jl")
+include("microphysics.jl")
 
 struct UnsaturatedMoistAirBuoyancy{FT} <: AbstractBuoyancyFormulation{Nothing}
     expansion_coefficient :: FT
@@ -43,6 +44,7 @@ end
 
 struct MoistAirBuoyancy{FT} <: AbstractBuoyancyFormulation{Nothing}
     thermodynamics :: AtmosphereThermodynamics{FT}
+    # microphysics TODO: figure this out
     reference_state :: ReferenceState{FT}
 end
 
@@ -54,7 +56,6 @@ function MoistAirBuoyancy(FT=Oceananigans.defaults.FloatType;
 end
 
 required_tracers(::MoistAirBuoyancy) = (:θ, :q)
-
 reference_density(z, mb::MoistAirBuoyancy) = reference_density(z, mb.reference_state, mb.thermodynamics)
 base_density(mb::MoistAirBuoyancy) = base_density(mb.reference_state, mb.thermodynamics)
 
@@ -113,26 +114,26 @@ end
 ##### Saturation specific humidity
 #####
 
-@inline function saturation_specific_humidity(i, j, k, grid, mb::MoistAirBuoyancy, T)
+@inline function saturation_specific_humidity(i, j, k, grid, mb::MoistAirBuoyancy, T, phase_transition)
     z = Oceananigans.Grids.znode(i, j, k, grid, c, c, c)
     Ti = @inbounds T[i, j, k]
-    return saturation_specific_humidity(Ti, z, mb.reference_state, mb.thermodynamics)
+    return saturation_specific_humidity(Ti, z, mb.reference_state, mb.thermodynamics, phase_transition)
 end
 
-struct SaturationKernelFunction{T}
+struct SaturationKernel{T, P}
+    phase_transition :: P
     temperature :: T
 end
 
-@inline function (kernel::SaturationKernelFunction)(i, j, k, grid, buoyancy)
+@inline function (kernel::SaturationKernel)(i, j, k, grid, buoyancy)
     T = kernel.temperature
-    return saturation_specific_humidity(i, j, k, grid, buoyancy, T)
+    return saturation_specific_humidity(i, j, k, grid, buoyancy, T, kernel.phase_transition)
 end
 
-SaturationKernelFunction(model::AbstractModel, T=TemperatureField(model)) =
-    SaturationKernelFunction(T)
-
-function SaturationField(model, T=TemperatureField(model))
-    func = SaturationKernelFunction(model, T)
+function SaturationField(model,
+                         T = TemperatureField(model);
+                         phase_transition = model.buoyancy.formulation.thermodynamics.condensation)
+    func = SaturationKernel(phase_transition, T)
     grid = model.grid
     buoyancy = model.buoyancy.formulation
     op = KernelFunctionOperation{Center, Center, Center}(func, grid, buoyancy)
@@ -143,7 +144,7 @@ end
 ##### Condensate
 #####
 
-struct CondensateKernelFunction{T}
+struct CondensateKernel{T}
     temperature :: T
 end
 
@@ -155,16 +156,13 @@ end
     return qˡ
 end
 
-@inline function (kernel::CondensateKernelFunction)(i, j, k, grid, buoyancy, q)
+@inline function (kernel::CondensateKernel)(i, j, k, grid, buoyancy, q)
     T = kernel.temperature
     return condensate_specific_humidity(i, j, k, grid, buoyancy, T, q)
 end
 
-CondensateKernelFunction(model::AbstractModel, T=TemperatureField(model)) =
-    CondensateKernelFunction(T)
-
 function CondensateField(model, T=TemperatureField(model))
-    func = CondensateKernelFunction(model, T)
+    func = CondensateKernel(T)
     grid = model.grid
     buoyancy = model.buoyancy.formulation
     q = model.tracers.q
