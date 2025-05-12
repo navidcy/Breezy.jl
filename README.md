@@ -1,7 +1,5 @@
 # AquaSkyLES.jl
 
-Oceananigans.jl comes above the ocean's surface...
-
 ### Instructions
 
 First [install Julia](https://julialang.org/downloads/); suggested version 1.10. See [juliaup](https://github.com/JuliaLang/juliaup) README for how to install 1.10 and make that version the default.
@@ -34,4 +32,4 @@ julia> include("examples/free_convection.jl")
 
 produces
 
-https://github.com/user-attachments/assets/ffc1c718-2e05-42d2-b3a5-6c680c780741
+https://github.com/user-attachments/assets/dc45d188-6c61-4eb5-95fb-9a51c6f99013
