@@ -103,7 +103,7 @@ Tn = @lift Tt[$n]
 qˡn = @lift qˡt[$n]
 title = @lift "t = $(prettytime(times[$n]))"
 
-fig = Figure(size=(1600, 800), fontsize=22)
+fig = Figure(size=(800, 400), fontsize=22)
 axθ = Axis(fig[1, 1], xlabel="x (m)", ylabel="z (m)")
 axq = Axis(fig[1, 2], xlabel="x (m)", ylabel="z (m)")
 axT = Axis(fig[2, 1], xlabel="x (m)", ylabel="z (m)")
@@ -115,7 +115,7 @@ Tmin = minimum(Tt)
 Tmax = maximum(Tt)
 
 hmθ = heatmap!(axθ, θn, colorrange=(Tₛ, Tₛ+Δθ))
-hmq = heatmap!(axq, qn, colorrange=(0, 2e-4), colormap=:magma)
+hmq = heatmap!(axq, qn, colorrange=(0, 2e-2), colormap=:magma)
 hmT = heatmap!(axT, Tn, colorrange=(Tmin, Tmax))
 hmqˡ = heatmap!(axqˡ, qˡn, colorrange=(0, 2e-4), colormap=:magma)
 
