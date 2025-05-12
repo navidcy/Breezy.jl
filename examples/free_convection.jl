@@ -103,7 +103,7 @@ Tn = @lift Tt[$n]
 qˡn = @lift qˡt[$n]
 title = @lift "t = $(prettytime(times[$n]))"
 
-fig = Figure(size=(800, 400), fontsize=22)
+fig = Figure(size=(800, 400), fontsize=12)
 axθ = Axis(fig[1, 1], xlabel="x (m)", ylabel="z (m)")
 axq = Axis(fig[1, 2], xlabel="x (m)", ylabel="z (m)")
 axT = Axis(fig[2, 1], xlabel="x (m)", ylabel="z (m)")
