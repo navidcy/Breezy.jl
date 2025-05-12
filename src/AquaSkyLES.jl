@@ -170,4 +170,6 @@ function CondensateField(model, T=TemperatureField(model))
     return Field(op)
 end
 
+include("AtmosphereModels/AtmosphereModels.jl")
+
 end # module AquaSkyLES
