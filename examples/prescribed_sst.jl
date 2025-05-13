@@ -26,11 +26,11 @@ condensation = thermodynamics.condensation
 Δz = Lz / Nz # grid spacing
 
 parameters = (; 
-    drag_coefficient = 1e-4,
-    heat_transfer_coefficient = 1e-5,
-    vapor_transfer_coefficient = 1e-5,
-    sea_surface_temperature = θ₀ + 1,
-    gust_speed = 1e-2,
+    drag_coefficient = 1e-3,
+    heat_transfer_coefficient = 1e-3,
+    vapor_transfer_coefficient = 5e-4,
+    sea_surface_temperature = θ₀ + 10,
+    gust_speed = 1e-1,
     base_air_density = AquaSkyLES.base_density(buoyancy), # air density at z=0,
     thermodynamics,
     condensation
@@ -46,19 +46,19 @@ parameters = (;
     Cᴰ = parameters.drag_coefficient
     Δu = u # stationary ocean
     Δv = v # stationary ocean
-    return sqrt(Cᴰ * (Δu^2 + Δv^2)) + 1e-2
+    return sqrt(Cᴰ * (Δu^2 + Δv^2)) + parameters.gust_speed
 end
 
 # Take care to handle U = 0
 @inline function x_momentum_flux(x, y, t, u, v, parameters)
     u★ = friction_velocity(x, y, t, u, v, parameters)
-    U = sqrt(u^2 + v^2) + parameters.gust_speed
+    U = sqrt(u^2 + v^2)
     return - u★^2 * u / U * (U > 0)
 end
 
 @inline function y_momentum_flux(x, y, t, u, v, parameters)
     u★ = friction_velocity(x, y, t, u, v, parameters)
-    U = sqrt(u^2 + v^2) + parameters.gust_speed
+    U = sqrt(u^2 + v^2)
     return - u★^2 * v / U * (U > 0)
 end
 
@@ -70,7 +70,8 @@ end
     Δθ = θ - θˢ
     # Using the scaling argument: u★ θ★ = Cᴴ * U * Δθ
     θ★ = Cᴴ / sqrt(Cᴰ) * Δθ
-    return - u★ * θ★
+    @show Jθ = - u★ * θ★
+    return Jθ
 end
 
 @inline function vapor_flux(x, y, t, u, v, q, parameters)
@@ -82,7 +83,8 @@ end
     Δq = q - qˢ
     # Using the scaling argument: u★ q★ = Cᵛ * U * Δq
     q★ = Cᵛ / sqrt(Cᴰ) * Δq 
-    return - u★ * q★
+    @show Jq = - u★ * q★
+    return Jq
 end
 
 u_surface_flux = FluxBoundaryCondition(x_momentum_flux; field_dependencies=(:u, :v), parameters)
