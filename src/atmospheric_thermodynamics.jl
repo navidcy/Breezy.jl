@@ -287,7 +287,7 @@ end
 """
     saturation_specific_humidity(T, z, reference_state, thermodynamics, phase_transition)
 
-Using the Clasius-Claperyon relation for saturation vapor pressure, compute theo
+Using the Clasius-Claperyon relation for saturation vapor pressure, compute the
 saturation specific humidity at temperature `T`, height `z`, given the
 `reference_state`, `thermodynamics` constants, and `phase_transition` constants representing
 parameters representing either condensation (vapor to liquid) or deposition (vapor to solid).
