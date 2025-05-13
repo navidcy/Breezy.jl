@@ -6,7 +6,7 @@ using AquaSkyLES
 Nx = 128
 Nz = 128
 Ny = 1
-Lz = 4 * 1024
+Lz = 2 * 1024
 grid = RectilinearGrid(size = (Nx, Ny, Nz),
                        x = (0, 2Lz),
                        y = (0, 2Lz),
@@ -30,7 +30,7 @@ parameters = (;
     heat_transfer_coefficient = 1e-3,
     vapor_transfer_coefficient = 1e-3,
     sea_surface_temperature = θ₀ + 10,
-    gust_speed = 1e-2,
+    gust_speed = 1e-2, # directly added to friction velocity (i.e. not multiplied by drag coefficient Cᴰ)
     base_air_density = AquaSkyLES.base_density(buoyancy), # air density at z=0,
     thermodynamics,
     condensation
@@ -102,19 +102,32 @@ model = NonhydrostaticModel(; grid, advection, buoyancy,
                             boundary_conditions = (u=u_bcs, v=v_bcs, θ=θ_bcs, q=q_bcs))
 
 Lz = grid.Lz
-Δθ = 5 # K
+Δθ = 2.5 # K
 Tₛ = reference_state.θ # K
 θᵢ(x, y, z) = Tₛ + Δθ * z / Lz + 1e-2 * Δθ * randn()
 qᵢ(x, y, z) = 1e-2 + 1e-5 * rand()
 set!(model, θ=θᵢ, q=qᵢ)
 
-simulation = Simulation(model, Δt=10, stop_time=4hours)
+simulation = Simulation(model, Δt=10, stop_time=1hours)
 conjure_time_step_wizard!(simulation, cfl=0.7)
 
 T = AquaSkyLES.TemperatureField(model)
 qˡ = AquaSkyLES.CondensateField(model, T)
 qᵛ★ = AquaSkyLES.SaturationField(model, T)
 δ = Field(model.tracers.q - qᵛ★)
+
+# new field for outputting Flux BCs
+u_flux = Field{Face, Face, Center}(model.grid, indices=(:, :, 1))
+
+# something like this?
+function update_surface_fluxes!(model, parameters)
+    u = model.velocities.u[:, :, 1]
+    v = model.velocities.v[:, :, 1]
+
+    u_flux[:, :] = x_momentum_flux(???, u, v, parameters)
+    compute!(u_flux)
+end
+
 
 function progress(sim)
     compute!(T)
@@ -123,6 +136,9 @@ function progress(sim)
     q = sim.model.tracers.q
     θ = sim.model.tracers.θ
     u, v, w = sim.model.velocities
+
+    # something like this?
+    update_surface_fluxes!(sim.model, parameters)
 
     umax = maximum(u)
     vmax = maximum(v)
@@ -149,7 +165,12 @@ end
 
 add_callback!(simulation, progress, IterationInterval(10))
 
+# outputs = merge(model.velocities, model.tracers, (; T, qˡ, qᵛ★))
+
 outputs = merge(model.velocities, model.tracers, (; T, qˡ, qᵛ★))
+surface_fluxes = (; u_flux)
+
+outputs = merge(outputs, surface_fluxes)
 
 ow = JLD2Writer(model, outputs,
                 filename = "prescribed_sst_convection.jld2",
@@ -189,9 +210,9 @@ Tmin = minimum(Tt)
 Tmax = maximum(Tt)
 
 hmθ = heatmap!(axθ, θn, colorrange=(Tₛ, Tₛ+Δθ))
-hmq = heatmap!(axq, qn, colorrange=(0, 2e-2), colormap=:magma)
+hmq = heatmap!(axq, qn, colorrange=(0.97e-2, 1.05e-2), colormap=:magma)
 hmT = heatmap!(axT, Tn, colorrange=(Tmin, Tmax))
-hmqˡ = heatmap!(axqˡ, qˡn, colorrange=(0, 2e-4), colormap=:magma)
+hmqˡ = heatmap!(axqˡ, qˡn, colorrange=(0, 1.5e-3), colormap=:magma)
 
 # Label(fig[0, 1], "θ", tellwidth=false)
 # Label(fig[0, 2], "q", tellwidth=false)
