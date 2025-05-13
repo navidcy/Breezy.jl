@@ -14,7 +14,7 @@ grid = RectilinearGrid(size = (Nx, Ny, Nz),
                        topology = (Periodic, Periodic, Bounded))
 
 p₀ = 101325 # Pa
-θ₀ = 288 # K
+θ₀ = 285 # K
 reference_state = AquaSkyLES.ReferenceState(base_pressure=p₀, potential_temperature=θ₀)
 buoyancy = AquaSkyLES.MoistAirBuoyancy(; reference_state)
 thermodynamics = buoyancy.thermodynamics
@@ -28,9 +28,9 @@ condensation = thermodynamics.condensation
 parameters = (; 
     drag_coefficient = 1e-3,
     heat_transfer_coefficient = 1e-3,
-    vapor_transfer_coefficient = 5e-4,
+    vapor_transfer_coefficient = 1e-3,
     sea_surface_temperature = θ₀ + 10,
-    gust_speed = 1e-1,
+    gust_speed = 1e-2,
     base_air_density = AquaSkyLES.base_density(buoyancy), # air density at z=0,
     thermodynamics,
     condensation
@@ -70,8 +70,7 @@ end
     Δθ = θ - θˢ
     # Using the scaling argument: u★ θ★ = Cᴴ * U * Δθ
     θ★ = Cᴴ / sqrt(Cᴰ) * Δθ
-    @show Jθ = - u★ * θ★
-    return Jθ
+    return - u★ * θ★
 end
 
 @inline function vapor_flux(x, y, t, u, v, q, parameters)
@@ -83,8 +82,7 @@ end
     Δq = q - qˢ
     # Using the scaling argument: u★ q★ = Cᵛ * U * Δq
     q★ = Cᵛ / sqrt(Cᴰ) * Δq 
-    @show Jq = - u★ * q★
-    return Jq
+    return - u★ * q★
 end
 
 u_surface_flux = FluxBoundaryCondition(x_momentum_flux; field_dependencies=(:u, :v), parameters)
@@ -110,7 +108,7 @@ Tₛ = reference_state.θ # K
 qᵢ(x, y, z) = 1e-2 + 1e-5 * rand()
 set!(model, θ=θᵢ, q=qᵢ)
 
-simulation = Simulation(model, Δt=10, stop_time=2hours)
+simulation = Simulation(model, Δt=10, stop_time=4hours)
 conjure_time_step_wizard!(simulation, cfl=0.7)
 
 T = AquaSkyLES.TemperatureField(model)
@@ -155,17 +153,17 @@ outputs = merge(model.velocities, model.tracers, (; T, qˡ, qᵛ★))
 
 ow = JLD2Writer(model, outputs,
                 filename = "prescribed_sst_convection.jld2",
-                schedule = IterationInterval(10),
+                schedule = TimeInterval(2minutes),
                 overwrite_existing = true)
 
 simulation.output_writers[:jld2] = ow
 
 run!(simulation)
 
-θt = FieldTimeSeries("free_convection.jld2", "θ")
-Tt = FieldTimeSeries("free_convection.jld2", "T")
-qt = FieldTimeSeries("free_convection.jld2", "q")
-qˡt = FieldTimeSeries("free_convection.jld2", "qˡ")
+θt = FieldTimeSeries("prescribed_sst_convection.jld2", "θ")
+Tt = FieldTimeSeries("prescribed_sst_convection.jld2", "T")
+qt = FieldTimeSeries("prescribed_sst_convection.jld2", "q")
+qˡt = FieldTimeSeries("prescribed_sst_convection.jld2", "qˡ")
 times = qt.times
 Nt = length(θt)
 
