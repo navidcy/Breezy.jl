@@ -30,6 +30,7 @@ parameters = (;
     heat_transfer_coefficient = 1e-5,
     vapor_transfer_coefficient = 1e-5,
     sea_surface_temperature = θ₀ + 1,
+    gust_speed = 1e-2,
     base_air_density = AquaSkyLES.base_density(buoyancy), # air density at z=0,
     thermodynamics,
     condensation
@@ -45,19 +46,19 @@ parameters = (;
     Cᴰ = parameters.drag_coefficient
     Δu = u # stationary ocean
     Δv = v # stationary ocean
-    return sqrt(Cᴰ * (Δu^2 + Δv^2))
+    return sqrt(Cᴰ * (Δu^2 + Δv^2)) + 1e-2
 end
 
 # Take care to handle U = 0
 @inline function x_momentum_flux(x, y, t, u, v, parameters)
     u★ = friction_velocity(x, y, t, u, v, parameters)
-    U = sqrt(u^2 + v^2)
+    U = sqrt(u^2 + v^2) + parameters.gust_speed
     return - u★^2 * u / U * (U > 0)
 end
 
 @inline function y_momentum_flux(x, y, t, u, v, parameters)
     u★ = friction_velocity(x, y, t, u, v, parameters)
-    U = sqrt(u^2 + v^2)
+    U = sqrt(u^2 + v^2) + parameters.gust_speed
     return - u★^2 * v / U * (U > 0)
 end
 
@@ -80,7 +81,7 @@ end
     Cᵛ = parameters.vapor_transfer_coefficient
     Δq = q - qˢ
     # Using the scaling argument: u★ q★ = Cᵛ * U * Δq
-    q★ = Cᵛ / sqrt(Cᴰ) * Δq
+    q★ = Cᵛ / sqrt(Cᴰ) * Δq 
     return - u★ * q★
 end
 
