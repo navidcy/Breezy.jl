@@ -3,7 +3,7 @@ using Oceananigans.Units
 using Printf
 using AquaSkyLES
 
-Nx = 4
+Nx = 128
 Nz = 128
 Ny = 1
 Lz = 4 * 1024
@@ -204,6 +204,6 @@ Colorbar(fig[2, 3], hmqˡ, label = "qˡ", vertical=true)
 
 fig
 
-record(fig, "free_convection.mp4", 1:Nt, framerate=12) do nn
+record(fig, "prescribed_sst.mp4", 1:Nt, framerate=12) do nn
     n[] = nn
 end
