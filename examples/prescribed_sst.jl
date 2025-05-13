@@ -3,7 +3,8 @@ using Oceananigans.Units
 using Printf
 using AquaSkyLES
 
-Nx = Nz = 128
+Nx = 4
+Nz = 128
 Ny = 1
 Lz = 4 * 1024
 grid = RectilinearGrid(size = (Nx, Ny, Nz),
@@ -19,38 +20,45 @@ buoyancy = AquaSkyLES.MoistAirBuoyancy(; reference_state)
 thermodynamics = buoyancy.thermodynamics
 condensation = thermodynamics.condensation
 
-ρ₀ = AquaSkyLES.base_density(buoyancy) # air density at z=0
-cₚ = buoyancy.thermodynamics.dry_air.heat_capacity
+# ρ₀ = AquaSkyLES.base_density(buoyancy) # air density at z=0
+# cₚ = buoyancy.thermodynamics.dry_air.heat_capacity
+
+Δz = Lz / Nz # grid spacing
 
 parameters = (; 
-    drag_coefficient = 2e-3,
-    heat_transfer_coefficient = 1e-3,
-    vapor_transfer_coefficient = 1e-3,
-    sea_surface_temperature = θ₀ + 10,
-    reference_state,
+    drag_coefficient = 1e-4,
+    heat_transfer_coefficient = 1e-5,
+    vapor_transfer_coefficient = 1e-5,
+    sea_surface_temperature = θ₀ + 1,
+    base_air_density = AquaSkyLES.base_density(buoyancy), # air density at z=0,
     thermodynamics,
     condensation
 )
 
+# Utility for computing the saturation specific humidity at the sea surface
 @inline surface_saturation_specific_humidity(T, parameters) =
-    AquaSkyLES.saturation_specific_humidity(T, zero(T),
-                                            parameters.reference_state,
+    AquaSkyLES.saturation_specific_humidity(T, parameters.base_air_density,
                                             parameters.thermodynamics,
                                             parameters.condensation)
 
 @inline function friction_velocity(x, y, t, u, v, parameters)
     Cᴰ = parameters.drag_coefficient
-    return sqrt(Cᴰ * (u^2 + v^2))
+    Δu = u # stationary ocean
+    Δv = v # stationary ocean
+    return sqrt(Cᴰ * (Δu^2 + Δv^2))
 end
 
+# Take care to handle U = 0
 @inline function x_momentum_flux(x, y, t, u, v, parameters)
     u★ = friction_velocity(x, y, t, u, v, parameters)
-    return - u★^2 * u / sqrt(u^2 + v^2)
+    U = sqrt(u^2 + v^2)
+    return - u★^2 * u / U * (U > 0)
 end
 
 @inline function y_momentum_flux(x, y, t, u, v, parameters)
     u★ = friction_velocity(x, y, t, u, v, parameters)
-    return - u★^2 * v / sqrt(u^2 + v^2)
+    U = sqrt(u^2 + v^2)
+    return - u★^2 * v / U * (U > 0)
 end
 
 @inline function temperature_flux(x, y, t, u, v, θ, parameters)
@@ -59,22 +67,21 @@ end
     Cᴰ = parameters.drag_coefficient
     Cᴴ = parameters.heat_transfer_coefficient
     Δθ = θ - θˢ
+    # Using the scaling argument: u★ θ★ = Cᴴ * U * Δθ
     θ★ = Cᴴ / sqrt(Cᴰ) * Δθ
-    return u★ * θ★
+    return - u★ * θ★
 end
 
 @inline function vapor_flux(x, y, t, u, v, q, parameters)
     u★ = friction_velocity(x, y, t, u, v, parameters)
-    # Note: typically we would compute this using the saturation specific humidity
-    # given the sea surface temperature
-    # θˢ = parameters.sea_surface_temperature
-    # qˢ = surface_saturation_specific_humidity(θˢ, parameters)
-    qˢ = zero(u★)
+    θˢ = parameters.sea_surface_temperature
+    qˢ = surface_saturation_specific_humidity(θˢ, parameters)
     Cᴰ = parameters.drag_coefficient
     Cᵛ = parameters.vapor_transfer_coefficient
     Δq = q - qˢ
+    # Using the scaling argument: u★ q★ = Cᵛ * U * Δq
     q★ = Cᵛ / sqrt(Cᴰ) * Δq
-    return u★ * q★
+    return - u★ * q★
 end
 
 u_surface_flux = FluxBoundaryCondition(x_momentum_flux; field_dependencies=(:u, :v), parameters)
@@ -139,12 +146,12 @@ function progress(sim)
     return nothing
 end
 
-add_callback!(simulation, progress, IterationInterval(10))
+add_callback!(simulation, progress, IterationInterval(1))
 
 outputs = merge(model.velocities, model.tracers, (; T, qˡ, qᵛ★))
 
 ow = JLD2Writer(model, outputs,
-                filename = "free_convection.jld2",
+                filename = "prescribed_sst_convection.jld2",
                 schedule = IterationInterval(10),
                 overwrite_existing = true)
 
