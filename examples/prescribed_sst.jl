@@ -147,7 +147,7 @@ function progress(sim)
     return nothing
 end
 
-add_callback!(simulation, progress, IterationInterval(1))
+add_callback!(simulation, progress, IterationInterval(10))
 
 outputs = merge(model.velocities, model.tracers, (; T, qˡ, qᵛ★))
 
