@@ -42,53 +42,62 @@ parameters = (;
                                             parameters.thermodynamics,
                                             parameters.condensation)
 
-@inline function friction_velocity(x, y, t, u, v, parameters)
+
+@inline function friction_velocity(i, j, grid, clock, model_fields, parameters)
     Cᴰ = parameters.drag_coefficient
+    u = model_fields.u[i, j, 1]
+    v = model_fields.v[i, j, 1]
     Δu = u # stationary ocean
     Δv = v # stationary ocean
     return sqrt(Cᴰ * (Δu^2 + Δv^2)) + parameters.gust_speed
 end
 
 # Take care to handle U = 0
-@inline function x_momentum_flux(x, y, t, u, v, parameters)
-    u★ = friction_velocity(x, y, t, u, v, parameters)
+@inline function x_momentum_flux(i, j, grid, clock, model_fields, parameters)
+    u = model_fields.u[i, j, 1]
+    v = model_fields.v[i, j, 1]
+    u★ = friction_velocity(i, j, grid, clock, model_fields, parameters)
     U = sqrt(u^2 + v^2)
     return - u★^2 * u / U * (U > 0)
 end
 
-@inline function y_momentum_flux(x, y, t, u, v, parameters)
-    u★ = friction_velocity(x, y, t, u, v, parameters)
+@inline function y_momentum_flux(i, j, grid, clock, model_fields, parameters)
+    u = model_fields.u[i, j, 1]
+    v = model_fields.v[i, j, 1]
+    u★ = friction_velocity(i, j, grid, clock, model_fields, parameters)
     U = sqrt(u^2 + v^2)
     return - u★^2 * v / U * (U > 0)
 end
 
-@inline function temperature_flux(x, y, t, u, v, θ, parameters)
-    u★ = friction_velocity(x, y, t, u, v, parameters)
+@inline function temperature_flux(i, j, grid, clock, model_fields, parameters)
+    u★ = friction_velocity(i, j, grid, clock, model_fields, parameters)
     θˢ = parameters.sea_surface_temperature
     Cᴰ = parameters.drag_coefficient
     Cᴴ = parameters.heat_transfer_coefficient
-    Δθ = θ - θˢ
+    Δθ = model_fields.θ[i, j, 1] - θˢ
     # Using the scaling argument: u★ θ★ = Cᴴ * U * Δθ
     θ★ = Cᴴ / sqrt(Cᴰ) * Δθ
     return - u★ * θ★
 end
 
-@inline function vapor_flux(x, y, t, u, v, q, parameters)
-    u★ = friction_velocity(x, y, t, u, v, parameters)
+@inline function vapor_flux(i, j, grid, clock, model_fields, parameters)
+    u★ = friction_velocity(i, j, grid, clock, model_fields, parameters)
     θˢ = parameters.sea_surface_temperature
     qˢ = surface_saturation_specific_humidity(θˢ, parameters)
     Cᴰ = parameters.drag_coefficient
     Cᵛ = parameters.vapor_transfer_coefficient
-    Δq = q - qˢ
+    Δq = model_fields.q[i, j, 1] - qˢ
     # Using the scaling argument: u★ q★ = Cᵛ * U * Δq
     q★ = Cᵛ / sqrt(Cᴰ) * Δq 
     return - u★ * q★
 end
 
-u_surface_flux = FluxBoundaryCondition(x_momentum_flux; field_dependencies=(:u, :v), parameters)
-v_surface_flux = FluxBoundaryCondition(y_momentum_flux; field_dependencies=(:u, :v), parameters)
-θ_surface_flux = FluxBoundaryCondition(temperature_flux; field_dependencies=(:u, :v, :θ), parameters)
-q_surface_flux = FluxBoundaryCondition(vapor_flux; field_dependencies=(:u, :v, :q), parameters)
+model_fields = merge(model.velocities, model.tracers)
+
+u_surface_flux = FluxBoundaryCondition(x_momentum_flux; discrete_form=true, parameters)
+v_surface_flux = FluxBoundaryCondition(y_momentum_flux; discrete_form=true, parameters)
+θ_surface_flux = FluxBoundaryCondition(temperature_flux; discrete_form=true, parameters)
+q_surface_flux = FluxBoundaryCondition(vapor_flux; discrete_form=true, parameters)
 
 u_bcs = FieldBoundaryConditions(bottom=u_surface_flux)
 v_bcs = FieldBoundaryConditions(bottom=v_surface_flux)
@@ -108,26 +117,13 @@ Tₛ = reference_state.θ # K
 qᵢ(x, y, z) = 1e-2 + 1e-5 * rand()
 set!(model, θ=θᵢ, q=qᵢ)
 
-simulation = Simulation(model, Δt=10, stop_time=1hours)
+simulation = Simulation(model, Δt=10, stop_time=4hours)
 conjure_time_step_wizard!(simulation, cfl=0.7)
 
 T = AquaSkyLES.TemperatureField(model)
 qˡ = AquaSkyLES.CondensateField(model, T)
 qᵛ★ = AquaSkyLES.SaturationField(model, T)
 δ = Field(model.tracers.q - qᵛ★)
-
-# new field for outputting Flux BCs
-u_flux = Field{Face, Face, Center}(model.grid, indices=(:, :, 1))
-
-# something like this?
-function update_surface_fluxes!(model, parameters)
-    u = model.velocities.u[:, :, 1]
-    v = model.velocities.v[:, :, 1]
-
-    u_flux[:, :] = x_momentum_flux(???, u, v, parameters)
-    compute!(u_flux)
-end
-
 
 function progress(sim)
     compute!(T)
@@ -137,8 +133,8 @@ function progress(sim)
     θ = sim.model.tracers.θ
     u, v, w = sim.model.velocities
 
-    # something like this?
-    update_surface_fluxes!(sim.model, parameters)
+    # # something like this?
+    # update_surface_fluxes!(sim.model, parameters)
 
     umax = maximum(u)
     vmax = maximum(v)
@@ -165,12 +161,7 @@ end
 
 add_callback!(simulation, progress, IterationInterval(10))
 
-# outputs = merge(model.velocities, model.tracers, (; T, qˡ, qᵛ★))
-
 outputs = merge(model.velocities, model.tracers, (; T, qˡ, qᵛ★))
-surface_fluxes = (; u_flux)
-
-outputs = merge(outputs, surface_fluxes)
 
 ow = JLD2Writer(model, outputs,
                 filename = "prescribed_sst_convection.jld2",
