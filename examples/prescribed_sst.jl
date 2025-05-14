@@ -115,7 +115,7 @@ Tₛ = reference_state.θ # K
 qᵢ(x, y, z) = 1e-2 + 1e-5 * rand()
 set!(model, θ=θᵢ, q=qᵢ)
 
-simulation = Simulation(model, Δt=10, stop_time=hours)
+simulation = Simulation(model, Δt=10, stop_time=4hours)
 conjure_time_step_wizard!(simulation, cfl=0.7)
 
 T = AquaSkyLES.TemperatureField(model)
