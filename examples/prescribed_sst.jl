@@ -133,9 +133,6 @@ function progress(sim)
     θ = sim.model.tracers.θ
     u, v, w = sim.model.velocities
 
-    # # something like this?
-    # update_surface_fluxes!(sim.model, parameters)
-
     umax = maximum(u)
     vmax = maximum(v)
     wmax = maximum(w)
