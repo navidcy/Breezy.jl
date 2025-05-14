@@ -92,8 +92,6 @@ end
     return - u★ * q★
 end
 
-model_fields = merge(model.velocities, model.tracers)
-
 u_surface_flux = FluxBoundaryCondition(x_momentum_flux; discrete_form=true, parameters)
 v_surface_flux = FluxBoundaryCondition(y_momentum_flux; discrete_form=true, parameters)
 θ_surface_flux = FluxBoundaryCondition(temperature_flux; discrete_form=true, parameters)
@@ -117,13 +115,14 @@ Tₛ = reference_state.θ # K
 qᵢ(x, y, z) = 1e-2 + 1e-5 * rand()
 set!(model, θ=θᵢ, q=qᵢ)
 
-simulation = Simulation(model, Δt=10, stop_time=4hours)
+simulation = Simulation(model, Δt=10, stop_time=hours)
 conjure_time_step_wizard!(simulation, cfl=0.7)
 
 T = AquaSkyLES.TemperatureField(model)
 qˡ = AquaSkyLES.CondensateField(model, T)
 qᵛ★ = AquaSkyLES.SaturationField(model, T)
 δ = Field(model.tracers.q - qᵛ★)
+
 
 function progress(sim)
     compute!(T)
