@@ -1,4 +1,4 @@
-struct AtmosphereModels
+module AtmosphereModels
 
 include("atmosphere_model.jl")
 
