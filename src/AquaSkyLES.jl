@@ -67,9 +67,10 @@ end
 function MoistAirBuoyancy(FT=Oceananigans.defaults.FloatType;
                            thermodynamics = AtmosphereThermodynamics(FT),
                            reference_state = ReferenceState{FT}(101325, 290),
-                           microphysics = WarmPhaseAdjustment())
+                           cloud_formation = WarmPhaseAdjustment())
 
-    return MoistAirBuoyancy{FT}(thermodynamics, reference_state)
+    CF = typeof(cloud_formation) 
+    return MoistAirBuoyancy{FT, CF}(thermodynamics, reference_state, cloud_formation)
 end
 
 required_tracers(::MoistAirBuoyancy) = (:θ, :q)

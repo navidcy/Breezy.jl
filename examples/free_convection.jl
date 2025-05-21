@@ -13,10 +13,11 @@ p₀ = 101325 # Pa
 reference_state = AquaSkyLES.ReferenceState(base_pressure=p₀, potential_temperature=θ₀)
 buoyancy = AquaSkyLES.MoistAirBuoyancy(; reference_state) #, microphysics)
 
+# Simple precipitation scheme from CloudMicrophysics    
 using CloudMicrophysics 
 using CloudMicrophysics.Microphysics0M: remove_precipitation
-microphysics = CloudMicrophysics.Parameters.Parameters0M{FT}(τ_precip=100, S_0=1e-5, qc_0=0)
-@inline precipitation(x, y, z, t, qᵗ, params) = remove_precipitation(params, qᵗ, 0)
+microphysics = CloudMicrophysics.Parameters.Parameters0M{FT}(τ_precip=100, S_0=0, qc_0=0.02)
+@inline precipitation(x, z, t, q, params) = remove_precipitation(params, q, 0)
 q_forcing = Forcing(precipitation, field_dependencies=:q, parameters=microphysics)
 
 ρ₀ = AquaSkyLES.base_density(buoyancy) # air density at z=0
@@ -70,8 +71,8 @@ function progress(sim)
     θmin = minimum(θ)
     θmax = maximum(θ)
 
-    msg = @sprintf("Iter: %d, t = %s, max|u|: (%.2e, %.2e, %.2e)",
-                    iteration(sim), prettytime(sim), umax, vmax, wmax)
+    msg = @sprintf("Iter: %d, t: %s, Δt: %s, max|u|: (%.2e, %.2e, %.2e)",
+                    iteration(sim), prettytime(sim), prettytime(sim.Δt), umax, vmax, wmax)
 
     msg *= @sprintf(", extrema(q): (%.2e, %.2e), max(qˡ): %.2e, min(δ): %.2e, extrema(θ): (%.2e, %.2e)",
                      qmin, qmax, qˡmax, δmax, θmin, θmax)
