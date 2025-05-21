@@ -10,6 +10,7 @@ Oceananigans = "9e8cae18-63c1-5223-a75c-80ca9d6e9a09"
 RootSolvers = "7181ea78-2dcb-4de3-ab41-2b8ab5a31e74"
 
 [compat]
+CloudMicrophysics = "0.22.13"
 JLD2 = "0.5.13"
 Oceananigans = "0.96"
 RootSolvers = "0.4.4"
