@@ -42,15 +42,32 @@ required_tracers(::UnsaturatedMoistAirBuoyancy) = (:θ, :q)
     return β * (θᵥ - θ₀)
 end
 
-struct MoistAirBuoyancy{FT} <: AbstractBuoyancyFormulation{Nothing}
+# Sketching ideas here:
+struct WarmPhaseAdjustment end
+
+struct FreezingTemperature{FT}
+    temperature :: FT
+end
+
+struct LinearPartitioning{FT}
+    freezing_temperature :: FT
+    homogeneous_ice_nucleation_temperature :: FT
+end
+
+struct MixedPhaseAdjustment{P}
+    partitioning :: P
+end
+
+struct MoistAirBuoyancy{FT, CF} <: AbstractBuoyancyFormulation{Nothing}
     thermodynamics :: AtmosphereThermodynamics{FT}
-    # microphysics TODO: figure this out
     reference_state :: ReferenceState{FT}
+    cloud_formation :: CF
 end
 
 function MoistAirBuoyancy(FT=Oceananigans.defaults.FloatType;
                            thermodynamics = AtmosphereThermodynamics(FT),
-                           reference_state = ReferenceState{FT}(101325, 290))
+                           reference_state = ReferenceState{FT}(101325, 290),
+                           microphysics = WarmPhaseAdjustment())
 
     return MoistAirBuoyancy{FT}(thermodynamics, reference_state)
 end

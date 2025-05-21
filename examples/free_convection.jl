@@ -7,10 +7,17 @@ Nx = Nz = 128
 Lz = 4 * 1024
 grid = RectilinearGrid(size=(Nx, Nz), x=(0, 2Lz), z=(0, Lz), topology=(Periodic, Flat, Bounded))
 
+FT = eltype(grid)
 p₀ = 101325 # Pa
 θ₀ = 288 # K
 reference_state = AquaSkyLES.ReferenceState(base_pressure=p₀, potential_temperature=θ₀)
-buoyancy = AquaSkyLES.MoistAirBuoyancy(; reference_state)
+buoyancy = AquaSkyLES.MoistAirBuoyancy(; reference_state) #, microphysics)
+
+using CloudMicrophysics 
+using CloudMicrophysics.Microphysics0M: remove_precipitation
+microphysics = CloudMicrophysics.Parameters.Parameters0M{FT}(τ_precip=100, S_0=1e-5, qc_0=0)
+@inline precipitation(x, y, z, t, qᵗ, params) = remove_precipitation(params, qᵗ, 0)
+q_forcing = Forcing(precipitation, field_dependencies=:q, parameters=microphysics)
 
 ρ₀ = AquaSkyLES.base_density(buoyancy) # air density at z=0
 cₚ = buoyancy.thermodynamics.dry_air.heat_capacity
@@ -25,6 +32,7 @@ advection = WENO() #(momentum=WENO(), θ=WENO(), q=WENO(bounds=(0, 1)))
 tracers = (:θ, :q)
 model = NonhydrostaticModel(; grid, advection, buoyancy,
                             tracers = (:θ, :q),
+                            forcing = (; q=q_forcing),
                             boundary_conditions = (θ=θ_bcs, q=q_bcs))
 
 Lz = grid.Lz
