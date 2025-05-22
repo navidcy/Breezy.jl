@@ -49,15 +49,14 @@ function set!(model::AtmosphereModel; enforce_mass_conservation=true, kw...)
 
     # Apply a mask
     # foreach(mask_immersed_field!, prognostic_fields(model))
-    update_state!(model)
+    update_state!(model, compute_tendencies=false)
     
     if enforce_mass_conservation
         FT = eltype(model.grid)
         calculate_pressure_correction!(model, one(FT))
         pressure_correct_velocities!(model, one(FT))
-        update_state!(model)
+        update_state!(model, compute_tendencies=false)
     end
 
-
-    update_state!(model)
+    return nothing
 end
