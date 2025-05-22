@@ -9,7 +9,7 @@ grid = RectilinearGrid(size=(Nx, Nz), x=(0, 2Lz), z=(0, Lz), topology=(Periodic,
 
 p₀ = 101325 # Pa
 θ₀ = 288 # K
-reference_state = AquaSkyLES.ReferenceState(base_pressure=p₀, potential_temperature=θ₀)
+reference_state = AquaSkyLES.ReferenceConstants(base_pressure=p₀, potential_temperature=θ₀)
 buoyancy = AquaSkyLES.MoistAirBuoyancy(; reference_state)
 
 ρ₀ = AquaSkyLES.base_density(buoyancy) # air density at z=0

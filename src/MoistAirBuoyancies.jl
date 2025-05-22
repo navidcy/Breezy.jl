@@ -242,8 +242,8 @@ end
 @inline function specific_volume(state::HeightReferenceThermodynamicState, ref, thermo)
     T = temperature(state, ref, thermo)
     Rᵐ = mixture_gas_constant(state.q, thermo)
-    pʳ = reference_pressure(state.z, ref, thermo)
-    return Rᵐ * T / pʳ
+    pᵣ = reference_pressure(state.z, ref, thermo)
+    return Rᵐ * T / pᵣ
 end
 
 @inline function exner_function(state::HeightReferenceThermodynamicState, ref, thermo)

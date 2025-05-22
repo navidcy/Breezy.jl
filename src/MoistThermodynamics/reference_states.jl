@@ -23,33 +23,33 @@ The reference density is defined as the density of dry air at the reference pres
 """
 @inline function reference_density(z, ref::ReferenceConstants, thermo)
     Rᵈ = dry_air_gas_constant(thermo)
-    p = reference_pressure(z, ref, thermo)
-    θ = ref.reference_potential_temperature
-    return p / (Rᵈ * θ)
+    pᵣ = reference_pressure(z, ref, thermo)
+    θᵣ = ref.reference_potential_temperature
+    return pᵣ / (Rᵈ * θᵣ)
 end
 
 @inline function base_density(ref::ReferenceConstants, thermo)
     Rᵈ = dry_air_gas_constant(thermo)
     p₀ = ref.base_pressure
-    θ = ref.reference_potential_temperature
-    return p₀ / (Rᵈ * θ)
+    θᵣ = ref.reference_potential_temperature
+    return p₀ / (Rᵈ * θᵣ)
 end
 
 @inline function reference_specific_volume(z, ref::ReferenceConstants, thermo)
     Rᵈ = dry_air_gas_constant(thermo)
-    p = reference_pressure(z, ref, thermo)
-    θ = ref.reference_potential_temperature
-    return Rᵈ * θ / p
+    pᵣ = reference_pressure(z, ref, thermo)
+    θᵣ = ref.reference_potential_temperature
+    return Rᵈ * θᵣ / pᵣ
 end
 
 @inline function reference_pressure(z, ref::ReferenceConstants, thermo)
     cᵖᵈ = thermo.dry_air.heat_capacity
     Rᵈ = dry_air_gas_constant(thermo)
-    ϰᵈ⁻¹ = Rᵈ / cᵖᵈ
+    inv_ϰᵈ = Rᵈ / cᵖᵈ
     g = thermo.gravitational_acceleration
-    θ = ref.reference_potential_temperature
+    θᵣ = ref.reference_potential_temperature
     p₀ = ref.base_pressure
-    return p₀ * (1 - g * z / (cᵖᵈ * θ))^ϰᵈ⁻¹
+    return p₀ * (1 - g * z / (cᵖᵈ * θᵣ))^inv_ϰᵈ
 end
 
 @inline function saturation_specific_humidity(T, z, ref::ReferenceConstants, thermo, phase_transition)
