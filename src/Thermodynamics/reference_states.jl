@@ -23,9 +23,11 @@ The reference density is defined as the density of dry air at the reference pres
 """
 @inline function reference_density(z, ref::ReferenceConstants, thermo)
     Rᵈ = dry_air_gas_constant(thermo)
+    cᵖᵈ = thermo.dry_air.heat_capacity
     pᵣ = reference_pressure(z, ref, thermo)
-    θᵣ = ref.reference_potential_temperature
-    return pᵣ / (Rᵈ * θᵣ)
+    ρ₀ = base_density(ref, thermo)
+    p₀ = ref.base_pressure
+    return ρ₀ * (pᵣ / p₀)^(1 - Rᵈ / cᵖᵈ)
 end
 
 @inline function base_density(ref::ReferenceConstants, thermo)
@@ -45,11 +47,10 @@ end
 @inline function reference_pressure(z, ref::ReferenceConstants, thermo)
     cᵖᵈ = thermo.dry_air.heat_capacity
     Rᵈ = dry_air_gas_constant(thermo)
-    inv_ϰᵈ = Rᵈ / cᵖᵈ
     g = thermo.gravitational_acceleration
     θᵣ = ref.reference_potential_temperature
     p₀ = ref.base_pressure
-    return p₀ * (1 - g * z / (cᵖᵈ * θᵣ))^inv_ϰᵈ
+    return p₀ * (1 - g * z / (cᵖᵈ * θᵣ))^(Rᵈ / cᵖᵈ)
 end
 
 @inline function saturation_specific_humidity(T, z, ref::ReferenceConstants, thermo, phase_transition)

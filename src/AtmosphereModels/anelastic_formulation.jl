@@ -1,6 +1,6 @@
 using Oceananigans.Utils: prettysummary
 
-using ..MoistThermodynamics:
+using ..Thermodynamics:
     AtmosphereThermodynamics,
     ReferenceConstants,
     reference_pressure,
@@ -34,14 +34,6 @@ struct AnelasticThermodynamicState{FT}
     exner_function :: FT
 end
 
-@inline function AnelasticThermodynamicState(θ, q, ρᵣ, pᵣ, p₀, thermo::AtmosphereThermodynamics)
-    Rᵐ = mixture_gas_constant(q, thermo)
-    cᵖᵐ = mixture_heat_capacity(q, thermo)
-    inv_ϰᵐ = Rᵐ / cᵖᵐ
-    Π = @inbounds (pᵣ / p₀)^inv_ϰᵐ
-    return AnelasticThermodynamicState(θ, q, ρᵣ, pᵣ, Π)
-end
-
 function AnelasticFormulation(grid, state_constants, thermo)
     pᵣ = Field{Nothing, Nothing, Center}(grid)
     ρᵣ = Field{Nothing, Nothing, Center}(grid)
@@ -49,6 +41,28 @@ function AnelasticFormulation(grid, state_constants, thermo)
     set!(ρᵣ, z -> reference_density(z, state_constants, thermo))
     return AnelasticFormulation(state_constants, pᵣ, ρᵣ)
 end
+
+function thermodynamic_state(i, j, k, grid, formulation::AnelasticFormulation, thermo, energy, absolute_humidity)
+    @inbounds begin
+        e = energy[i, j, k]
+        pᵣ = formulation.reference_pressure[i, j, k]
+        ρᵣ = formulation.reference_density[i, j, k]
+        ρq = absolute_humidity[i, j, k]
+    end
+
+    cᵖᵈ = thermo.dry_air.heat_capacity
+    θ = e / (cᵖᵈ * ρᵣ)
+
+    q = ρq / ρᵣ
+    Rᵐ = mixture_gas_constant(q, thermo)
+    cᵖᵐ = mixture_heat_capacity(q, thermo)
+
+    p₀ = formulation.constants.base_pressure
+    Π = (pᵣ / p₀)^(Rᵐ / cᵖᵐ)
+
+    return AnelasticThermodynamicState(θ, q, ρᵣ, pᵣ, Π)
+end
+
 
 @inline function specific_volume(i, j, k, grid, formulation, temperature, specific_humidity, thermo)
     @inbounds begin

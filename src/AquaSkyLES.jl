@@ -2,8 +2,8 @@ module AquaSkyLES
 
 export MoistAirBuoyancy, AtmosphereThermodynamics, ReferenceConstants
 
-include("MoistThermodynamics/MoistThermodynamics.jl")
-using .MoistThermodynamics
+include("Thermodynamics/Thermodynamics.jl")
+using .Thermodynamics
 
 include("MoistAirBuoyancies.jl")
 using .MoistAirBuoyancies

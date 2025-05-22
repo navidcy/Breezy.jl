@@ -10,7 +10,7 @@ import Oceananigans.BuoyancyFormulations: AbstractBuoyancyFormulation,
                                           buoyancy_perturbationᶜᶜᶜ,
                                           required_tracers
 
-using ..MoistThermodynamics:
+using ..Thermodynamics:
     AtmosphereThermodynamics,
     ReferenceConstants,
     mixture_heat_capacity,

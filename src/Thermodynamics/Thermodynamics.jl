@@ -1,4 +1,4 @@
-module MoistThermodynamics
+module Thermodynamics
 
 include("atmosphere_thermodynamics.jl")
 include("vapor_saturation.jl")

@@ -1,8 +1,9 @@
 import Oceananigans.Fields: set!
 using Oceananigans.TimeSteppers: update_state!
 using Oceananigans.BoundaryConditions: fill_halo_regions!
+using Oceananigans.Models.NonhydrostaticModels: calculate_pressure_correction!, pressure_correct_velocities!
 
-function set!(model::AtmosphereModel; kw...)
+function set!(model::AtmosphereModel; enforce_mass_conservation=true, kw...)
     for (name, value) in kw
 
         # Prognostic variables
@@ -22,22 +23,41 @@ function set!(model::AtmosphereModel; kw...)
             θ = model.temperature # use scratch
             set!(θ, value)
 
-            ρ₀ = model.formulation.reference_density
-            cᵖ = model.thermodynamics.dry_air.heat_capacity
+            ρʳ = model.formulation.reference_density
+            cᵖᵈ = model.thermodynamics.dry_air.heat_capacity
             ϕ = model.energy # use scratch
-            value = ρ₀ * cᵖ * θ
+            value = ρʳ * cᵖᵈ * θ
         elseif name == :q
-            q = model.specific_humidity # use scratch
+            q = model.specific_humidity
             set!(q, value)
 
-            ρ₀ = model.formulation.reference_density
-            ϕ = model.absolute_humidity # use scratch
-            value = ρ₀ * q
+            ρʳ = model.formulation.reference_density
+            ϕ = model.absolute_humidity
+            value = ρʳ * q
+        elseif name ∈ (:u, :v, :w)
+            u = model.velocities[name]
+            set!(u, value)
+
+            ρʳ = model.formulation.reference_density
+            ϕ = model.momentum[Symbol(:ρ, name)]
+            value = ρʳ * u
         end
 
         set!(ϕ, value)                
         fill_halo_regions!(ϕ, model.clock, fields(model))
     end
+
+    # Apply a mask
+    # foreach(mask_immersed_field!, prognostic_fields(model))
+    update_state!(model)
+    
+    if enforce_mass_conservation
+        FT = eltype(model.grid)
+        calculate_pressure_correction!(model, one(FT))
+        pressure_correct_velocities!(model, one(FT))
+        update_state!(model)
+    end
+
 
     update_state!(model)
 end

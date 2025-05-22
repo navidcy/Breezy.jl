@@ -1,4 +1,4 @@
-using ..MoistThermodynamics:
+using ..Thermodynamics:
     AtmosphereThermodynamics,
     ReferenceConstants,
     reference_pressure,
@@ -28,30 +28,33 @@ struct DefaultValue end
 tupleit(t::Tuple) = t
 tupleit(t) = tuple(t)
 
-mutable struct AtmosphereModel{Fm, Ar, Ts, Gr, Cl, Th, De, Mo, En, Wa, Hu,
-                               Te, Pr, Pp, So, Ve, Tr, Ad, Co, Fo, Mi, Cn} <: AbstractModel{Ts, Ar}
-    architecture :: Ar
-    grid :: Gr
-    clock :: Cl
-    formulation :: Fm
-    thermodynamics :: Th
-    density :: De
-    momentum :: Mo
-    energy :: En
-    absolute_humidity :: Wa
-    specific_humidity :: Hu
-    temperature :: Te
-    pressure :: Pr
-    hydrostatic_pressure_anomaly :: Pp
-    pressure_solver :: So
-    velocities :: Ve
-    tracers :: Tr
-    advection :: Ad
-    coriolis :: Co
-    forcing :: Fo
-    microphysics :: Mi
-    condensates :: Cn
-    timestepper :: Ts
+
+mutable struct AtmosphereModel{Frm, Arc, Tst, Grd, Clk, Thm, Den, Mom, Eng, Wat, Hum,
+                               Tmp, Prs, Ppa, Sol, Vel, Trc, Adv, Cor, Frc, Mic, Cnd, Cls, Dif} <: AbstractModel{Tst, Arc}
+    architecture :: Arc
+    grid :: Grd
+    clock :: Clk
+    formulation :: Frm
+    thermodynamics :: Thm
+    density :: Den
+    momentum :: Mom
+    energy :: Eng
+    absolute_humidity :: Wat
+    specific_humidity :: Hum
+    temperature :: Tmp
+    nonhydrostatic_pressure :: Prs
+    hydrostatic_pressure_anomaly :: Ppa
+    pressure_solver :: Sol
+    velocities :: Vel
+    tracers :: Trc
+    advection :: Adv
+    coriolis :: Cor
+    forcing :: Frc
+    microphysics :: Mic
+    condensates :: Cnd
+    timestepper :: Tst
+    closure :: Cls
+    diffusivity_fields :: Dif
 end
 
 function default_formulation(grid, thermo)
@@ -79,7 +82,7 @@ function AtmosphereModel(grid;
     tracers = tupleit(tracers) # supports tracers=:c keyword argument (for example)
 
     hydrostatic_pressure_anomaly = CenterField(grid)
-    pressure = CenterField(grid)
+    nonhydrostatic_pressure = CenterField(grid)
 
     # Next, we form a list of default boundary conditions:
     names = field_names(formulation, tracers)
@@ -114,6 +117,10 @@ function AtmosphereModel(grid;
     timestepper = TimeStepper(timestepper, grid, prognostic_fields)
     pressure_solver = FourierTridiagonalPoissonSolver(grid, tridiagonal_direction=ZDirection())
 
+    # TODO: support these
+    closure = nothing
+    diffusivity_fields = nothing
+
     model = AtmosphereModel(arch,
                             grid,
                             clock,
@@ -125,7 +132,7 @@ function AtmosphereModel(grid;
                             absolute_humidity,
                             specific_humidity,
                             temperature,
-                            pressure,
+                            nonhydrostatic_pressure,
                             hydrostatic_pressure_anomaly,
                             pressure_solver,
                             velocities,
@@ -135,7 +142,9 @@ function AtmosphereModel(grid;
                             forcing,
                             microphysics,
                             condensates,
-                            timestepper)
+                            timestepper,
+                            closure,
+                            diffusivity_fields)
 
     update_state!(model)
 

@@ -2,24 +2,27 @@ using AquaSkyLES.AtmosphereModels: AtmosphereModel
 using Oceananigans
 
 grid = RectilinearGrid(size=(1, 1, 128), x=(0, 1), y=(0, 1), z=(0, 25e3))
+
 model = AtmosphereModel(grid)
 
-cᵖ = model.thermodynamics.dry_air.heat_capacity
-ρ₀ = first(model.formulation.reference_density)
 Lz = grid.Lz
-Δθ = 5 # K
+Δθ = 1 # K
 Tₛ = model.formulation.constants.reference_potential_temperature
-eᵢ(x, y, z) = ρ₀ * cᵖ * (Tₛ + Δθ * z / Lz)
-qᵢ(x, y, z) = 1e-2 + 1e-5 * rand()
-set!(model, e=eᵢ, q=qᵢ)
+θᵢ(x, y, z) = Tₛ + Δθ * z / Lz
+qᵢ(x, y, z) = 1e-2
+Ξᵢ(x, y, z) = 1e-2 * randn()
+set!(model, θ=θᵢ, q=qᵢ, u=Ξᵢ, v=Ξᵢ, w=Ξᵢ)
+
+simulation = Simulation(model, Δt=10, stop_iteration=1)
+run!(simulation)
 
 using GLMakie
 
-using AquaSkyLES.MoistThermodynamics: dry_air_gas_constant
+using AquaSkyLES.Thermodynamics: dry_air_gas_constant
+cᵖᵈ = model.thermodynamics.dry_air.heat_capacity
 Rᵈ = dry_air_gas_constant(model.thermodynamics)
-ϰ = cᵖ / Rᵈ
 pᵣ = model.formulation.reference_pressure
-Π = Field((pᵣ / pᵣ[1])^(1/ϰ))
+Π = Field((pᵣ / pᵣ[1, 1, 1])^(Rᵈ / cᵖᵈ))
 compute!(Π)
 
 θ = CenterField(grid)
@@ -27,8 +30,10 @@ set!(θ, (x, y, z) -> Tₛ + Δθ * z / Lz)
 T1 = Field(θ * Π)
 compute!(T1)
 
+fig = Figure(size=(1000, 1000))
+
 axT = Axis(fig[1, 1], title="Temperature")
-#lines!(axT, model.temperature)
+lines!(axT, model.temperature)
 lines!(axT, T1)
 
 axp = Axis(fig[1, 2], title="Reference Pressure")
