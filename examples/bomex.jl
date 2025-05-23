@@ -4,7 +4,7 @@ using Oceananigans.Units
 using Printf
 using AquaSkyLES
 
-arch = CPU()
+arch = GPU()
 
 # Siebesma et al (2003) resolution!
 # DOI: https://doi.org/10.1175/1520-0469(2003)60<1201:ALESIS>2.0.CO;2
@@ -12,7 +12,7 @@ arch = CPU()
 # Nz = 75
 
 Nx = 128
-Ny = 1
+Ny = 128
 Nz = 150
 
 Lx = 6400

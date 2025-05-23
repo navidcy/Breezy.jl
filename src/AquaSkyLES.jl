@@ -6,6 +6,8 @@ using Oceananigans
 using Oceananigans: AbstractModel
 using Oceananigans.Grids: AbstractGrid
 
+using Adapt
+
 import Oceananigans.BuoyancyFormulations: AbstractBuoyancyFormulation,
                                           buoyancy_perturbationᶜᶜᶜ,
                                           required_tracers
@@ -63,6 +65,11 @@ struct MoistAirBuoyancy{FT, CF} <: AbstractBuoyancyFormulation{Nothing}
     reference_state :: ReferenceState{FT}
     cloud_formation :: CF
 end
+
+Adapt.adapt_structure(to, mb::MoistAirBuoyancy) =
+    MoistAirBuoyancy(adapt(to, mb.thermodynamics),
+                     adapt(to, mb.reference_state),
+                     adapt(to, mb.cloud_formation))
 
 function MoistAirBuoyancy(FT=Oceananigans.defaults.FloatType;
                            thermodynamics = AtmosphereThermodynamics(FT),

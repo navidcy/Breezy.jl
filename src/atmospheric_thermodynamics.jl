@@ -1,7 +1,13 @@
+using Adapt
+
 struct IdealGas{FT}
     molar_mass :: FT
     heat_capacity :: FT # specific heat capacity at constant pressure
 end
+
+Adapt.adapt_structure(to, gas::IdealGas) =
+    IdealGas(adapt(to, gas.molar_mass),
+             adapt(to, gas.heat_capacity))
 
 function IdealGas(FT = Oceananigans.defaults.FloatType;
                   molar_mass = 0.02897,
@@ -16,6 +22,11 @@ struct Saturation{FT}
     triple_point_temperature :: FT
     triple_point_pressure :: FT
 end
+
+Adapt.adapt_structure(to, sat::Saturation) =
+    Saturation(adapt(to, sat.energy_reference_temperature),
+               adapt(to, sat.triple_point_temperature),
+               adapt(to, sat.triple_point_pressure))
 
 """
     Saturation(FT = Oceananigans.defaults.FloatType;
@@ -71,6 +82,10 @@ struct PhaseTransition{FT}
     heat_capacity :: FT
 end
 
+Adapt.adapt_structure(to, pt::PhaseTransition) =
+    PhaseTransition(adapt(to, pt.latent_heat),
+                    adapt(to, pt.heat_capacity))
+
 """
     PhaseTransition(FT = Oceananigans.defaults.FloatType; latent_heat, heat_capacity)
 
@@ -105,6 +120,15 @@ struct AtmosphereThermodynamics{FT, S, C, F}
     condensation :: C
     deposition :: F
 end
+
+Adapt.adapt_structure(to, thermo::AtmosphereThermodynamics) =
+    AtmosphereThermodynamics(adapt(to, thermo.molar_gas_constant),
+                             adapt(to, thermo.gravitational_acceleration),
+                             adapt(to, thermo.dry_air),
+                             adapt(to, thermo.vapor),
+                             adapt(to, thermo.saturation),
+                             adapt(to, thermo.condensation),
+                             adapt(to, thermo.deposition))
 
 """
     AtmosphereThermodynamics(FT = Oceananigans.defaults.FloatType;
@@ -244,6 +268,10 @@ struct ReferenceState{FT}
     p₀ :: FT # base pressure: reference pressure at z=0
     θ :: FT  # constant reference potential temperature
 end
+
+Adapt.adapt_structure(to, ref::ReferenceState) =
+    ReferenceState(adapt(to, ref.p₀),
+                   adapt(to, ref.θ))
 
 function ReferenceState(FT = Oceananigans.defaults.FloatType;
                         base_pressure = 101325,
