@@ -4,6 +4,7 @@ authors = ["Navid C. Constantinou <navidcy@users.noreply.github.com>, Madi, Greg
 version = "0.1.0"
 
 [deps]
+AtmosphericProfilesLibrary = "86bc3604-9858-485a-bdbe-831ec50de11d"
 CloudMicrophysics = "6a9e3e04-43cd-43ba-94b9-e8782df3c71b"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 Oceananigans = "9e8cae18-63c1-5223-a75c-80ca9d6e9a09"
