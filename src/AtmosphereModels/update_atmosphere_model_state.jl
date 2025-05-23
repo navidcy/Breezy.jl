@@ -5,6 +5,7 @@ using ..Thermodynamics:
 
 using Oceananigans.BoundaryConditions: fill_halo_regions!
 using Oceananigans.ImmersedBoundaries: mask_immersed_field!
+using Oceananigans.Architectures: architecture
 import Oceananigans.TimeSteppers: update_state!
 import Oceananigans: fields, prognostic_fields
 
@@ -20,7 +21,7 @@ fields(model::AnelasticModel) = prognostic_fields(model)
 function update_state!(model::AnelasticModel, callbacks=[]; compute_tendencies=true)
     fill_halo_regions!(prognostic_fields(model), model.clock, fields(model), async=true)
     compute_auxiliary_variables!(model)
-    update_hydrostatic_pressure!(model)
+    # update_hydrostatic_pressure!(model)
     compute_tendencies && compute_tendencies!(model)
     return nothing
 end
@@ -32,7 +33,9 @@ function compute_auxiliary_variables!(model)
     formulation = model.formulation
     momentum = model.momentum
 
-    launch!(arch, grid, :xyz, _compute_velocities!, velocities, formulation, momentum)
+    launch!(arch, grid, :xyz, _compute_velocities!, velocities, grid, formulation, momentum)
+    fill_halo_regions!(velocities)
+    foreach(mask_immersed_field!, velocities)
 
     launch!(arch, grid, :xyz,
             _compute_auxiliary_thermodynamic_variables!,
@@ -44,21 +47,25 @@ function compute_auxiliary_variables!(model)
             model.energy,
             model.absolute_humidity)
 
+    fill_halo_regions!(model.temperature)
+    fill_halo_regions!(model.specific_humidity)
+
     return nothing
 end
 
-@kernel function _compute_velocities!(velocities, formulation, momentum)
+@kernel function _compute_velocities!(velocities, grid, formulation, momentum)
     i, j, k = @index(Global, NTuple)
 
     @inbounds begin
-        ρᵣ = formulation.reference_density[i, j, k]
         ρu = momentum.ρu[i, j, k]
         ρv = momentum.ρv[i, j, k]
         ρw = momentum.ρw[i, j, k]
 
-        velocities.u[i, j, k] = ρu / ρᵣ
-        velocities.v[i, j, k] = ρv / ρᵣ
-        velocities.w[i, j, k] = ρw / ρᵣ
+        ρᵣᵃᵃᶜ = formulation.reference_density[i, j, k]
+        ρᵣᵃᵃᶠ = ℑzᵃᵃᶠ(i, j, k, grid, formulation.reference_density)
+        velocities.u[i, j, k] = ρu / ρᵣᵃᵃᶜ
+        velocities.v[i, j, k] = ρv / ρᵣᵃᵃᶜ
+        velocities.w[i, j, k] = ρw / ρᵣᵃᵃᶠ
     end
 end
 
@@ -108,8 +115,9 @@ function compute_tendencies!(model::AnelasticModel)
                    fields(model))    
 
     pₕ′ = model.hydrostatic_pressure_anomaly
-    u_args = tuple(common_args..., model.forcing.ρu, pₕ′)
-    v_args = tuple(common_args..., model.forcing.ρv, pₕ′)
+    ρᵣ = model.formulation.reference_density
+    u_args = tuple(common_args..., model.forcing.ρu, pₕ′, ρᵣ)
+    v_args = tuple(common_args..., model.forcing.ρv, pₕ′, ρᵣ)
     w_args = tuple(common_args..., model.forcing.ρw)
 
     launch!(arch, grid, :xyz, compute_x_momentum_tendency!, Gρu, grid, u_args)
@@ -163,11 +171,15 @@ end
                                      clock,
                                      model_fields,
                                      forcing,
+                                     reference_density,
                                      hydrostatic_pressure_anomaly)
+
+    # Note: independent of x
+    ρᵣ = @inbounds reference_density[i, j, k]    
 
     return ( - div_𝐯u(i, j, k, grid, advection, velocities, momentum.ρu)
              - x_f_cross_U(i, j, k, grid, coriolis, momentum)
-             - hydrostatic_pressure_gradient_x(i, j, k, grid, hydrostatic_pressure_anomaly)
+             - ρᵣ * hydrostatic_pressure_gradient_x(i, j, k, grid, hydrostatic_pressure_anomaly)
              + forcing(i, j, k, grid, clock, model_fields))
 end
 
@@ -179,11 +191,15 @@ end
                                      clock,
                                      model_fields,
                                      forcing,
+                                     reference_density,
                                      hydrostatic_pressure_anomaly)
+
+    # Note: independent of y
+    ρᵣ = @inbounds reference_density[i, j, k]    
 
     return ( - div_𝐯v(i, j, k, grid, advection, velocities, momentum.ρu)
              - y_f_cross_U(i, j, k, grid, coriolis, momentum)
-             - hydrostatic_pressure_gradient_y(i, j, k, grid, hydrostatic_pressure_anomaly)
+             - ρᵣ * hydrostatic_pressure_gradient_y(i, j, k, grid, hydrostatic_pressure_anomaly)
              + forcing(i, j, k, grid, clock, model_fields))
 end
 
@@ -213,50 +229,20 @@ end
              + forcing(i, j, k, grid, clock, model_fields))
 end
 
-import Oceananigans.TimeSteppers: calculate_pressure_correction!, pressure_correct_velocities!
-using Oceananigans.Models.NonhydrostaticModels: solve_for_pressure!
+#=
+@inline function energy_tendency(i, j, k, grid,
+                                 formulation,
+                                 energy,
+                                 forcing,
+                                 advection,
+                                 velocities,
+                                 condensates,
+                                 microphysics
+                                 clock,
+                                 model_fields)
 
-"""
-    calculate_pressure_correction!(model::NonhydrostaticModel, Δt)
-
-Calculate the (nonhydrostatic) pressure correction associated `tendencies`, `velocities`, and step size `Δt`.
-"""
-function calculate_pressure_correction!(model::AnelasticModel, Δt)
-
-    # Mask immersed velocities
-    foreach(mask_immersed_field!, model.momentum)
-    fill_halo_regions!(model.momentum, model.clock, fields(model))
-    solve_for_pressure!(model.nonhydrostatic_pressure, model.pressure_solver, Δt, model.momentum)
-    fill_halo_regions!(model.nonhydrostatic_pressure)
-
-    return nothing
+    return ( - div_Uc(i, j, k, grid, advection, velocities, energy)
+             + microphysical_energy_tendency(i, j, k, grid, formulation, microphysics, condensates)
+             + forcing(i, j, k, grid, clock, model_fields))
 end
-
-#####
-##### Fractional and time stepping
-#####
-
-"""
-Update the predictor velocities u, v, and w with the non-hydrostatic pressure via
-
-    `u^{n+1} = u^n - δₓp_{NH} / Δx * Δt`
-"""
-@kernel function _pressure_correct_momentum!(M, grid, Δt, pₙ)
-    i, j, k = @index(Global, NTuple)
-
-    @inbounds M.ρu[i, j, k] -= ∂xᶠᶜᶜ(i, j, k, grid, pₙ) * Δt
-    @inbounds M.ρv[i, j, k] -= ∂yᶜᶠᶜ(i, j, k, grid, pₙ) * Δt
-    @inbounds M.ρw[i, j, k] -= ∂zᶜᶜᶠ(i, j, k, grid, pₙ) * Δt
-end
-
-function pressure_correct_velocities!(model::AnelasticModel, Δt)
-
-    launch!(model.architecture, model.grid, :xyz,
-            _pressure_correct_momentum!,
-            model.momentum,
-            model.grid,
-            Δt,
-            model.nonhydrostatic_pressure)
-
-    return nothing
-end
+=#

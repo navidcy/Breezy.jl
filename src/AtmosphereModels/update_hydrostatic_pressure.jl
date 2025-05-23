@@ -6,6 +6,7 @@ using Oceananigans.Operators: Δzᶜᶜᶜ, Δzᶜᶜᶠ, ℑzᵃᵃᶠ
 using Oceananigans.ImmersedBoundaries: PartialCellBottom, ImmersedBoundaryGrid
 using Oceananigans.Grids: topology
 using Oceananigans.Grids: XFlatGrid, YFlatGrid
+using Oceananigans.Utils: KernelParameters
 
 const c = Center()
 const f = Face()
@@ -17,21 +18,15 @@ const f = Face()
     return g * (α - αʳ) / αʳ
 end
 
-"""
-Update the hydrostatic pressure perturbation pHY′. This is done by integrating
-the `buoyancy_perturbationᶜᶜᶜ` downwards:
-
-    `pHY′ = ∫ buoyancy_perturbationᶜᶜᶜ dz` from `z=0` down to `z=-Lz`
-"""
-@kernel function _update_hydrostatic_pressure!(pₕ′, grid, formulation, ρᵣ, T, q, thermo)
+@kernel function _update_hydrostatic_pressure!(pₕ′, grid, formulation, T, q, thermo)
     i, j = @index(Global, NTuple)
 
-    b₁ = buoyancy(i, j, 1, grid, formulation, T, q, thermo)
-    @inbounds pₕ′[i, j, 1] = ρᵣ[i, j, 1] * b₁
+    @inbounds pₕ′[i, j, 0] = 0
+    @inbounds pₕ′[i, j, 1] = 0
 
     @inbounds for k in 2:grid.Nz
         bₖ = ℑzᵃᵃᶠ(i, j, k, grid, buoyancy, formulation, T, q, thermo)
-        Δp′ = ρᵣ[i, j, k] * bₖ
+        Δp′ = bₖ * Δzᶜᶜᶠ(i, j, k, grid)
         pₕ′[i, j, k] = pₕ′[i, j, k-1] + Δp′
     end
 end
@@ -43,8 +38,10 @@ function update_hydrostatic_pressure!(model)
     formulation = model.formulation
     T = model.temperature
     q = model.specific_humidity
-    ρᵣ = model.formulation.reference_density
     thermo = model.thermodynamics
-    launch!(arch, grid, :xy, _update_hydrostatic_pressure!, pₕ′, grid, formulation, ρᵣ, T, q, thermo)
+    Nx, Ny, Nz = size(grid)
+    kernel_parameters = KernelParameters(0:Nx+1, 0:Ny+1)
+    launch!(arch, grid, kernel_parameters, _update_hydrostatic_pressure!, pₕ′, grid, formulation, T, q, thermo)
+    fill_halo_regions!(pₕ′)
     return nothing
 end

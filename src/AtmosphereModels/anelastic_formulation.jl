@@ -39,6 +39,8 @@ function AnelasticFormulation(grid, state_constants, thermo)
     ρᵣ = Field{Nothing, Nothing, Center}(grid)
     set!(pᵣ, z -> reference_pressure(z, state_constants, thermo))
     set!(ρᵣ, z -> reference_density(z, state_constants, thermo))
+    fill_halo_regions!(pᵣ)
+    fill_halo_regions!(ρᵣ)
     return AnelasticFormulation(state_constants, pᵣ, ρᵣ)
 end
 
@@ -62,7 +64,6 @@ function thermodynamic_state(i, j, k, grid, formulation::AnelasticFormulation, t
 
     return AnelasticThermodynamicState(θ, q, ρᵣ, pᵣ, Π)
 end
-
 
 @inline function specific_volume(i, j, k, grid, formulation, temperature, specific_humidity, thermo)
     @inbounds begin
@@ -102,9 +103,11 @@ function materialize_momentum_and_velocities(formulation::AnelasticFormulation, 
     ρw = ZFaceField(grid, boundary_conditions=boundary_conditions.ρw)
     momentum = (; ρu, ρv, ρw)
 
-    u = XFaceField(grid)
-    v = YFaceField(grid)
-    w = ZFaceField(grid)
+    velocity_bcs = NamedTuple(name => FieldBoundaryConditions() for name in (:u, :v, :w))
+    velocity_bcs = regularize_field_boundary_conditions(velocity_bcs, grid, (:u, :v, :w))
+    u = XFaceField(grid, boundary_conditions=velocity_bcs.u)
+    v = YFaceField(grid, boundary_conditions=velocity_bcs.v)
+    w = ZFaceField(grid, boundary_conditions=velocity_bcs.w)
     velocities = (; u, v, w)
 
     return velocities, momentum
