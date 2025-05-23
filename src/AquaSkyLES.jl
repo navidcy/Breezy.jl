@@ -66,7 +66,15 @@ struct MoistAirBuoyancy{FT, CF} <: AbstractBuoyancyFormulation{Nothing}
     cloud_formation :: CF
 end
 
-Adapt.adapt_structure(to, mb::MoistAirBuoyancy) =
+function Adapt.adapt_structure(to, mb::MoistAirBuoyancy)
+    thermodynamics = adapt(to, mb.thermodynamics)
+    reference_state = adapt(to, mb.reference_state)
+    cloud_formation = adapt(to, mb.cloud_formation)
+    FT = eltype(thermodynamics)
+    CF = typeof(cloud_formation)
+    return MoistAirBuoyancy{FT, CT}(thermodynamics, reference_state, cloud_formation)
+end
+
     MoistAirBuoyancy(adapt(to, mb.thermodynamics),
                      adapt(to, mb.reference_state),
                      adapt(to, mb.cloud_formation))

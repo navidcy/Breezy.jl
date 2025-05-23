@@ -121,6 +121,8 @@ struct AtmosphereThermodynamics{FT, S, C, F}
     deposition :: F
 end
 
+Base.eltype(::AtmosphereThermodynamics{FT}) where FT = FT
+
 Adapt.adapt_structure(to, thermo::AtmosphereThermodynamics) =
     AtmosphereThermodynamics(adapt(to, thermo.molar_gas_constant),
                              adapt(to, thermo.gravitational_acceleration),
