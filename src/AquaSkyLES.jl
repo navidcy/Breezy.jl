@@ -75,14 +75,10 @@ function Adapt.adapt_structure(to, mb::MoistAirBuoyancy)
     return MoistAirBuoyancy{FT, CT}(thermodynamics, reference_state, cloud_formation)
 end
 
-    MoistAirBuoyancy(adapt(to, mb.thermodynamics),
-                     adapt(to, mb.reference_state),
-                     adapt(to, mb.cloud_formation))
-
 function MoistAirBuoyancy(FT=Oceananigans.defaults.FloatType;
-                           thermodynamics = AtmosphereThermodynamics(FT),
-                           reference_state = ReferenceState{FT}(101325, 290),
-                           cloud_formation = WarmPhaseAdjustment())
+                          thermodynamics = AtmosphereThermodynamics(FT),
+                          reference_state = ReferenceState{FT}(101325, 290),
+                          cloud_formation = WarmPhaseAdjustment())
 
     CF = typeof(cloud_formation) 
     return MoistAirBuoyancy{FT, CF}(thermodynamics, reference_state, cloud_formation)
