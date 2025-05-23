@@ -5,9 +5,14 @@ struct IdealGas{FT}
     heat_capacity :: FT # specific heat capacity at constant pressure
 end
 
-Adapt.adapt_structure(to, gas::IdealGas) =
-    IdealGas(adapt(to, gas.molar_mass),
-             adapt(to, gas.heat_capacity))
+Base.eltype(::IdealGas{FT}) where FT = FT
+
+function Adapt.adapt_structure(to, gas::IdealGas)
+    molar_mass = adapt(to, gas.molar_mass)
+    heat_capacity = adapt(to, gas.heat_capacity)
+    FT = typeof(molar_mass)
+    return IdealGas{FT}(molar_mass, heat_capacity)
+end
 
 function IdealGas(FT = Oceananigans.defaults.FloatType;
                   molar_mass = 0.02897,
@@ -123,14 +128,26 @@ end
 
 Base.eltype(::AtmosphereThermodynamics{FT}) where FT = FT
 
-Adapt.adapt_structure(to, thermo::AtmosphereThermodynamics) =
-    AtmosphereThermodynamics(adapt(to, thermo.molar_gas_constant),
-                             adapt(to, thermo.gravitational_acceleration),
-                             adapt(to, thermo.dry_air),
-                             adapt(to, thermo.vapor),
-                             adapt(to, thermo.saturation),
-                             adapt(to, thermo.condensation),
-                             adapt(to, thermo.deposition))
+function Adapt.adapt_structure(to, thermo::AtmosphereThermodynamics)
+    molar_gas_constant = adapt(to, thermo.molar_gas_constant)   
+    gravitational_acceleration = adapt(to, thermo.gravitational_acceleration)
+    dry_air = adapt(to, thermo.dry_air)
+    vapor = adapt(to, thermo.vapor)
+    saturation = adapt(to, thermo.saturation)
+    condensation = adapt(to, thermo.condensation)
+    deposition = adapt(to, thermo.deposition)
+    FT = typeof(molar_gas_constant)
+    S = typeof(saturation)
+    C = typeof(condensation)
+    F = typeof(deposition)
+    return AtmosphereThermodynamics{FT, S, C, F}(molar_gas_constant,
+                                                 gravitational_acceleration,
+                                                 dry_air,
+                                                 vapor,
+                                                 saturation,
+                                                 condensation,
+                                                 deposition)
+end
 
 """
     AtmosphereThermodynamics(FT = Oceananigans.defaults.FloatType;

@@ -60,28 +60,25 @@ struct MixedPhaseAdjustment{P}
     partitioning :: P
 end
 
-struct MoistAirBuoyancy{FT, CF} <: AbstractBuoyancyFormulation{Nothing}
+struct MoistAirBuoyancy{FT} <: AbstractBuoyancyFormulation{Nothing}
     thermodynamics :: AtmosphereThermodynamics{FT}
     reference_state :: ReferenceState{FT}
-    cloud_formation :: CF
+    # cloud_formation :: CF
 end
 
 function Adapt.adapt_structure(to, mb::MoistAirBuoyancy)
     thermodynamics = adapt(to, mb.thermodynamics)
     reference_state = adapt(to, mb.reference_state)
-    cloud_formation = adapt(to, mb.cloud_formation)
+    # cloud_formation = adapt(to, mb.cloud_formation)
     FT = eltype(thermodynamics)
-    CF = typeof(cloud_formation)
-    return MoistAirBuoyancy{FT, CT}(thermodynamics, reference_state, cloud_formation)
+    return MoistAirBuoyancy{FT}(thermodynamics, reference_state)
 end
 
 function MoistAirBuoyancy(FT=Oceananigans.defaults.FloatType;
                           thermodynamics = AtmosphereThermodynamics(FT),
-                          reference_state = ReferenceState{FT}(101325, 290),
-                          cloud_formation = WarmPhaseAdjustment())
+                          reference_state = ReferenceState{FT}(101325, 290))
 
-    CF = typeof(cloud_formation) 
-    return MoistAirBuoyancy{FT, CF}(thermodynamics, reference_state, cloud_formation)
+    return MoistAirBuoyancy{FT}(thermodynamics, reference_state)
 end
 
 required_tracers(::MoistAirBuoyancy) = (:θ, :q)
