@@ -9,11 +9,11 @@ Lz = grid.Lz
 Δθ = 2 # K
 Tₛ = model.formulation.constants.reference_potential_temperature
 θᵢ(x, y, z) = Tₛ + Δθ * z / Lz
-qᵢ(x, y, z) = 1e-3 + 1e-5 * rand()
+qᵢ(x, y, z) = 0 #1e-3 + 1e-5 * rand()
 Ξᵢ(x, y, z) = 1e-2 * randn()
-set!(model, θ=θᵢ, q=qᵢ, u=Ξᵢ, v=Ξᵢ, w=Ξᵢ)
+set!(model, θ=θᵢ, q=qᵢ, u=Ξᵢ, v=Ξᵢ)
 
-simulation = Simulation(model, Δt=1e-16, stop_iteration=1)
+simulation = Simulation(model, Δt=1e-2, stop_iteration=3)
 
 function progress(sim)
     T = sim.model.temperature
@@ -38,6 +38,7 @@ add_callback!(simulation, progress, IterationInterval(1))
 
 run!(simulation)
 
+#=
 using GLMakie
 
 using AquaSkyLES.Thermodynamics: dry_air_gas_constant
@@ -71,3 +72,5 @@ axe = Axis(fig[1, 5], title="Energy")
 lines!(axe, model.energy)
 
 fig
+
+=#
