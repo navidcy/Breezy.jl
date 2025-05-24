@@ -54,7 +54,7 @@ function set!(model::AtmosphereModel; enforce_mass_conservation=true, kw...)
     if enforce_mass_conservation
         FT = eltype(model.grid)
         compute_pressure_correction!(model, one(FT))
-        pressure_correct_velocities!(model, one(FT))
+        make_pressure_correction!(model, one(FT))
         update_state!(model)
     end
 

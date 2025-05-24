@@ -6,14 +6,14 @@ grid = RectilinearGrid(size=(1, 1, 128), x=(0, 1), y=(0, 1), z=(0, 25e3))
 model = AtmosphereModel(grid)
 
 Lz = grid.Lz
-Δθ = 1 # K
+Δθ = 2 # K
 Tₛ = model.formulation.constants.reference_potential_temperature
 θᵢ(x, y, z) = Tₛ + Δθ * z / Lz
-qᵢ(x, y, z) = 1e-2
+qᵢ(x, y, z) = 1e-3 + 1e-5 * rand()
 Ξᵢ(x, y, z) = 1e-2 * randn()
 set!(model, θ=θᵢ, q=qᵢ, u=Ξᵢ, v=Ξᵢ, w=Ξᵢ)
 
-simulation = Simulation(model, Δt=10, stop_iteration=1)
+simulation = Simulation(model, Δt=1e-16, stop_iteration=1)
 
 function progress(sim)
     T = sim.model.temperature

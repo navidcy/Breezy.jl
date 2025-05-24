@@ -1,4 +1,8 @@
+using Oceananigans.Architectures: architecture
+using Oceananigans.Grids: inactive_cell
 using Oceananigans.Utils: prettysummary
+using Oceananigans.Operators: Δzᵃᵃᶜ, Δzᵃᵃᶠ, divᶜᶜᶜ
+using Oceananigans.Solvers: solve!
 
 using ..Thermodynamics:
     AtmosphereThermodynamics,
@@ -9,11 +13,22 @@ using ..Thermodynamics:
     mixture_heat_capacity,
     dry_air_gas_constant
 
+using KernelAbstractions: @kernel, @index
+
+import Oceananigans.Solvers: tridiagonal_direction, compute_main_diagonal!
+import Oceananigans.TimeSteppers: compute_pressure_correction!, make_pressure_correction!
+
+#####
+##### Formulation definition
+#####
+
 struct AnelasticFormulation{FT, F}
     constants :: ReferenceConstants{FT}
     reference_pressure :: F
     reference_density :: F
 end
+
+const AnelasticModel = AtmosphereModel{<:AnelasticFormulation}
 
 function Base.summary(formulation::AnelasticFormulation)
     p₀ = formulation.constants.base_pressure
@@ -42,6 +57,10 @@ function AnelasticFormulation(grid, state_constants, thermo)
     return AnelasticFormulation(state_constants, pᵣ, ρᵣ)
 end
 
+#####
+##### Thermodynamic state
+#####
+
 function thermodynamic_state(i, j, k, grid, formulation::AnelasticFormulation, thermo, energy, absolute_humidity)
     @inbounds begin
         e = energy[i, j, k]
@@ -62,7 +81,6 @@ function thermodynamic_state(i, j, k, grid, formulation::AnelasticFormulation, t
 
     return AnelasticThermodynamicState(θ, q, ρᵣ, pᵣ, Π)
 end
-
 
 @inline function specific_volume(i, j, k, grid, formulation, temperature, specific_humidity, thermo)
     @inbounds begin
@@ -110,8 +128,10 @@ function materialize_momentum_and_velocities(formulation::AnelasticFormulation, 
     return velocities, momentum
 end
 
-import Oceananigans.Solvers: tridiagonal_direction, _compute_main_diagonal!
-import Oceananigans.TimeSteppers: compute_pressure_correction!, make_pressure_correction!
+#####
+##### Anelastic pressure solver utilities
+#####
+
 
 struct AnelasticTridiagonalSolverFormulation{R}
     reference_density :: R
@@ -126,23 +146,31 @@ function formulation_pressure_solver(anelastic_formulation::AnelasticFormulation
     return solver
 end
 
-@kernel function _compute_main_diagonal!(D, grid, λx, λy, formulation::AnelasticTridiagonalSolverFormulation)
+# Note: diagonal coefficients depend on non-tridiagonal directions because
+# eigenvalues depend on non-tridiagonal directions.
+function compute_main_diagonal!(main_diagonal, formulation::AnelasticTridiagonalSolverFormulation, grid, λ1, λ2)
+    arch = grid.architecture
+    reference_density = formulation.reference_density
+    launch!(arch, grid, :xy, _compute_anelastic_main_diagonal!, main_diagonal, grid, λ1, λ2, reference_density)
+    return nothing
+end
+
+@kernel function _compute_anelastic_main_diagonal!(D, grid, λx, λy, reference_density)
     i, j = @index(Global, NTuple)
     Nz = size(grid, 3)
 
-
     # Using a homogeneous Neumann (zero Gradient) boundary condition:
     @inbounds begin
-        ρ¹ = @inbounds formulation.reference_density[1, 1, 1]
-        ρᴺ = @inbounds formulation.reference_density[1, 1, Nz]
+        ρ¹ = @inbounds reference_density[1, 1, 1]
+        ρᴺ = @inbounds reference_density[1, 1, Nz]
 
         D[i, j, 1]  = -1 / Δzᵃᵃᶠ(i, j,  2, grid) - ρ¹ * Δzᵃᵃᶜ(i, j,  1, grid) * (λx[i] + λy[j])
         D[i, j, Nz] = -1 / Δzᵃᵃᶠ(i, j, Nz, grid) - ρᴺ * Δzᵃᵃᶜ(i, j, Nz, grid) * (λx[i] + λy[j])
 
         for k in 2:Nz-1
-            ρᵏ = @inbounds formulation.reference_density[1, 1, k]
-            ρ⁺ = @inbounds formulation.reference_density[1, 1, k+1]
-            ρ⁻ = @inbounds formulation.reference_density[1, 1, k-1]
+            ρᵏ = @inbounds reference_density[1, 1, k]
+            ρ⁺ = @inbounds reference_density[1, 1, k+1]
+            ρ⁻ = @inbounds reference_density[1, 1, k-1]
 
             ρ̄⁺ = (ρᵏ + ρ⁺) / 2
             ρ̄ᵏ = (ρ⁻ + ρᵏ) / 2
@@ -173,7 +201,7 @@ function compute_pressure_correction!(model::AnelasticModel, Δt)
     fill_halo_regions!(model.momentum, model.clock, fields(model))
 
     ρʳ = model.formulation.reference_density
-    ρU = model.momentum
+    ρŨ = model.momentum
     solver = model.pressure_solver
     pₙ = model.nonhydrostatic_pressure
     solve_for_anelastic_pressure!(pₙ, solver, ρʳ, ρŨ)
