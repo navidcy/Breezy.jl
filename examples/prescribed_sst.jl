@@ -6,7 +6,7 @@ using AquaSkyLES
 Nx = 128
 Nz = 128
 Ny = 1
-Lz = 4 * 1024
+Lz = 2 * 1024
 grid = RectilinearGrid(size = (Nx, Ny, Nz),
                        x = (0, 2Lz),
                        y = (0, 2Lz),
@@ -30,7 +30,7 @@ parameters = (;
     heat_transfer_coefficient = 1e-3,
     vapor_transfer_coefficient = 1e-3,
     sea_surface_temperature = θ₀ + 10,
-    gust_speed = 1e-2,
+    gust_speed = 1e-2, # directly added to friction velocity (i.e. not multiplied by drag coefficient Cᴰ)
     base_air_density = AquaSkyLES.base_density(buoyancy), # air density at z=0,
     thermodynamics,
     condensation
@@ -42,53 +42,60 @@ parameters = (;
                                             parameters.thermodynamics,
                                             parameters.condensation)
 
-@inline function friction_velocity(x, y, t, u, v, parameters)
+
+@inline function friction_velocity(i, j, grid, clock, model_fields, parameters)
     Cᴰ = parameters.drag_coefficient
+    u = model_fields.u[i, j, 1]
+    v = model_fields.v[i, j, 1]
     Δu = u # stationary ocean
     Δv = v # stationary ocean
     return sqrt(Cᴰ * (Δu^2 + Δv^2)) + parameters.gust_speed
 end
 
 # Take care to handle U = 0
-@inline function x_momentum_flux(x, y, t, u, v, parameters)
-    u★ = friction_velocity(x, y, t, u, v, parameters)
+@inline function x_momentum_flux(i, j, grid, clock, model_fields, parameters)
+    u = model_fields.u[i, j, 1]
+    v = model_fields.v[i, j, 1]
+    u★ = friction_velocity(i, j, grid, clock, model_fields, parameters)
     U = sqrt(u^2 + v^2)
     return - u★^2 * u / U * (U > 0)
 end
 
-@inline function y_momentum_flux(x, y, t, u, v, parameters)
-    u★ = friction_velocity(x, y, t, u, v, parameters)
+@inline function y_momentum_flux(i, j, grid, clock, model_fields, parameters)
+    u = model_fields.u[i, j, 1]
+    v = model_fields.v[i, j, 1]
+    u★ = friction_velocity(i, j, grid, clock, model_fields, parameters)
     U = sqrt(u^2 + v^2)
     return - u★^2 * v / U * (U > 0)
 end
 
-@inline function temperature_flux(x, y, t, u, v, θ, parameters)
-    u★ = friction_velocity(x, y, t, u, v, parameters)
+@inline function temperature_flux(i, j, grid, clock, model_fields, parameters)
+    u★ = friction_velocity(i, j, grid, clock, model_fields, parameters)
     θˢ = parameters.sea_surface_temperature
     Cᴰ = parameters.drag_coefficient
     Cᴴ = parameters.heat_transfer_coefficient
-    Δθ = θ - θˢ
+    Δθ = model_fields.θ[i, j, 1] - θˢ
     # Using the scaling argument: u★ θ★ = Cᴴ * U * Δθ
     θ★ = Cᴴ / sqrt(Cᴰ) * Δθ
     return - u★ * θ★
 end
 
-@inline function vapor_flux(x, y, t, u, v, q, parameters)
-    u★ = friction_velocity(x, y, t, u, v, parameters)
+@inline function vapor_flux(i, j, grid, clock, model_fields, parameters)
+    u★ = friction_velocity(i, j, grid, clock, model_fields, parameters)
     θˢ = parameters.sea_surface_temperature
     qˢ = surface_saturation_specific_humidity(θˢ, parameters)
     Cᴰ = parameters.drag_coefficient
     Cᵛ = parameters.vapor_transfer_coefficient
-    Δq = q - qˢ
+    Δq = model_fields.q[i, j, 1] - qˢ
     # Using the scaling argument: u★ q★ = Cᵛ * U * Δq
     q★ = Cᵛ / sqrt(Cᴰ) * Δq 
     return - u★ * q★
 end
 
-u_surface_flux = FluxBoundaryCondition(x_momentum_flux; field_dependencies=(:u, :v), parameters)
-v_surface_flux = FluxBoundaryCondition(y_momentum_flux; field_dependencies=(:u, :v), parameters)
-θ_surface_flux = FluxBoundaryCondition(temperature_flux; field_dependencies=(:u, :v, :θ), parameters)
-q_surface_flux = FluxBoundaryCondition(vapor_flux; field_dependencies=(:u, :v, :q), parameters)
+u_surface_flux = FluxBoundaryCondition(x_momentum_flux; discrete_form=true, parameters)
+v_surface_flux = FluxBoundaryCondition(y_momentum_flux; discrete_form=true, parameters)
+θ_surface_flux = FluxBoundaryCondition(temperature_flux; discrete_form=true, parameters)
+q_surface_flux = FluxBoundaryCondition(vapor_flux; discrete_form=true, parameters)
 
 u_bcs = FieldBoundaryConditions(bottom=u_surface_flux)
 v_bcs = FieldBoundaryConditions(bottom=v_surface_flux)
@@ -102,7 +109,7 @@ model = NonhydrostaticModel(; grid, advection, buoyancy,
                             boundary_conditions = (u=u_bcs, v=v_bcs, θ=θ_bcs, q=q_bcs))
 
 Lz = grid.Lz
-Δθ = 5 # K
+Δθ = 2.5 # K
 Tₛ = reference_state.θ # K
 θᵢ(x, y, z) = Tₛ + Δθ * z / Lz + 1e-2 * Δθ * randn()
 qᵢ(x, y, z) = 1e-2 + 1e-5 * rand()
@@ -115,6 +122,23 @@ T = AquaSkyLES.TemperatureField(model)
 qˡ = AquaSkyLES.CondensateField(model, T)
 qᵛ★ = AquaSkyLES.SaturationField(model, T)
 δ = Field(model.tracers.q - qᵛ★)
+
+# Output BCs
+# Sensible heat flux
+Jθ = Oceananigans.Models.BoundaryConditionOperation(model.tracers.θ, :bottom, model)
+ρ₀ = AquaSkyLES.base_density(buoyancy) # air density at z=0
+cₚ = buoyancy.thermodynamics.dry_air.heat_capacity
+JSH = Field(ρ₀ * cₚ * Jθ) # Heat flux [W/m^2]
+
+# Latent heat flux
+Jq = Oceananigans.Models.BoundaryConditionOperation(model.tracers.q, :bottom, model)
+Lᵛ = parameters.condensation.latent_heat
+JLH = Field(ρ₀ * Lᵛ * Jq) # [W/m^2]
+
+# Kinematic momentum flux
+Ju = Oceananigans.Models.BoundaryConditionOperation(model.velocities.u, :bottom, model) # [m^2/s^2]
+Jv = Oceananigans.Models.BoundaryConditionOperation(model.velocities.v, :bottom, model) # [m^2/s^2]
+
 
 function progress(sim)
     compute!(T)
@@ -149,7 +173,7 @@ end
 
 add_callback!(simulation, progress, IterationInterval(10))
 
-outputs = merge(model.velocities, model.tracers, (; T, qˡ, qᵛ★))
+outputs = merge(model.velocities, model.tracers, (; T, qˡ, qᵛ★, JSH, JLH, Ju, Jv))
 
 ow = JLD2Writer(model, outputs,
                 filename = "prescribed_sst_convection.jld2",
@@ -169,7 +193,7 @@ Nt = length(θt)
 
 using GLMakie, Printf
 
-n = Observable(length(θt))
+n = Observable(1)
 
 θn = @lift θt[$n]
 qn = @lift qt[$n]
@@ -189,10 +213,10 @@ Tmin = minimum(Tt)
 Tmax = maximum(Tt)
 
 hmθ = heatmap!(axθ, θn, colorrange=(Tₛ, Tₛ+Δθ))
-hmq = heatmap!(axq, qn, colorrange=(0, 2e-2), colormap=:magma)
+hmq = heatmap!(axq, qn, colorrange=(0.97e-2, 1.05e-2), colormap=:magma)
 hmT = heatmap!(axT, Tn, colorrange=(Tmin, Tmax))
-hmqˡ = heatmap!(axqˡ, qˡn, colorrange=(0, 2e-4), colormap=:magma)
-
+hmqˡ = heatmap!(axqˡ, qˡn, colorrange=(0, 1.5e-3), colormap=:magma)
+ 
 # Label(fig[0, 1], "θ", tellwidth=false)
 # Label(fig[0, 2], "q", tellwidth=false)
 # Label(fig[0, 1], "θ", tellwidth=false)
@@ -208,3 +232,54 @@ fig
 record(fig, "prescribed_sst.mp4", 1:Nt, framerate=12) do nn
     n[] = nn
 end
+
+
+# surface flux timeseries
+QSH = FieldTimeSeries("prescribed_sst_convection.jld2", "JSH")
+QLH = FieldTimeSeries("prescribed_sst_convection.jld2", "JLH")
+Qu = FieldTimeSeries("prescribed_sst_convection.jld2", "Ju")
+Qv = FieldTimeSeries("prescribed_sst_convection.jld2", "Jv")
+
+QSH_av = zeros(length(QSH.times))
+QLH_av = zeros(length(QSH.times))
+ΔT_av = zeros(length(QSH.times))
+Qv_av = zeros(length(QSH.times))
+Qu_av = zeros(length(QSH.times))
+
+for n in 1:length(QSH.times)
+    QSHn = Field(Average(QSH[n], dims=1))
+    compute!(QSHn)
+    QSH_av[n] = QSHn[1, 1, 1]
+
+    QLHn = Field(Average(QLH[n], dims=1))
+    compute!(QLHn)
+    QLH_av[n] = QLHn[1, 1, 1]
+
+    Qun = Field(Average(Qu[n], dims=1))
+    compute!(Qun)
+    Qu_av[n] = Qun[1, 1, 1]
+
+    Qvn = Field(Average(Qv[n], dims=1))
+    compute!(Qvn)
+    Qv_av[n] = Qvn[1, 1, 1]
+
+    ΔT_av[n] = -mean(θt[:,1,1,n])+parameters.sea_surface_temperature
+
+end
+
+ΔTtitle =  string(znodes(grid, Center())[1], "m air-sea temperature difference")
+fig = Figure(size=(600, 700), fontsize=12)
+axtau = Axis(fig[1, 1], ylabel=L"\tau/\rho_0 ~(\mathrm{m}^2/\mathrm{s}^2)", xlabel = "time [h]")
+axΔT = Axis(fig[3, 1], ylabel=L"\Delta T ~(\mathrm{K})", xlabel = "time [h]", title = ΔTtitle)
+axSH = Axis(fig[2, 1], ylabel=L"J~(\mathrm{W}/\mathrm{m}^2)", xlabel = "time [h]")
+
+lines!(axtau, QSH.times/3600, Qu_av, label = L"\tau_x/\rho_0")
+lines!(axtau, QSH.times/3600, Qv_av, label = L"\tau_y/\rho_0")
+lines!(axΔT, QSH.times/3600, ΔT_av)
+lines!(axSH, QSH.times/3600, QSH_av, label = L"J^{SH}")
+lines!(axSH, QLH.times/3600, QLH_av, label = L"J^{LH}")
+
+fig[1, 2] = Legend(fig, axtau, framevisible = false)
+fig[2, 2] = Legend(fig, axSH, framevisible = false)
+save("Surface_fluxes.png", fig, px_per_unit = 4)
+
