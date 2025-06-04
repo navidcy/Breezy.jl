@@ -34,7 +34,7 @@ q_bcs = FieldBoundaryConditions(bottom=vapor_flux)
 
 advection = WENO() #(momentum=WENO(), θ=WENO(), q=WENO(bounds=(0, 1)))
 tracers = (:θ, :q)
-model = NonhydrostaticModel(; grid, buoyancy,
+model = NonhydrostaticModel(; grid, advection, buoyancy,
                             tracers = (:θ, :q),
                             forcing = (; q=q_forcing),
                             boundary_conditions = (θ=θ_bcs, q=q_bcs))
