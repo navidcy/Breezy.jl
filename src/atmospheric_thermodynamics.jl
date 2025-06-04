@@ -184,14 +184,9 @@ function AtmosphereThermodynamics(FT = Oceananigans.defaults.FloatType;
     vapor = IdealGas(FT; molar_mass = vapor_molar_mass,
                          heat_capacity = vapor_heat_capacity)
 
-    S = typeof(saturation)
-    C = typeof(condensation)
-    F = typeof(deposition)
-
-    return AtmosphereThermodynamics{FT, S, C, F}(convert(FT, molar_gas_constant),
-                                                 convert(FT, gravitational_acceleration),
-                                                 dry_air, vapor,
-                                                 saturation, condensation, deposition)
+    return AtmosphereThermodynamics(convert(FT, molar_gas_constant),
+                                        convert(FT, gravitational_acceleration),
+                                        dry_air, vapor, saturation, condensation, deposition)
 end
 
 #####
