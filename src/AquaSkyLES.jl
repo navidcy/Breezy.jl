@@ -153,6 +153,14 @@ struct SaturationKernel{T, P}
     temperature :: T
 end
 
+function Adapt.adapt_structure(to, sk::SaturationKernel)
+    phase_transition = adapt(to, sk.phase_transition)
+    temperature = adapt(to, sk.temperature)
+    P = typeof(phase_transition)
+    T = typeof(temperature)
+    return SaturationKernel{T, P}(phase_transition, temperature)
+end
+
 @inline function (kernel::SaturationKernel)(i, j, k, grid, buoyancy)
     T = kernel.temperature
     return saturation_specific_humidity(i, j, k, grid, buoyancy, T, kernel.phase_transition)
