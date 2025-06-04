@@ -3,7 +3,7 @@ using Oceananigans.Units
 using Printf
 using AquaSkyLES
 
-arch = GPU()
+arch = CPU()
 
 Nx = Nz = 128
 Lz = 4 * 1024
