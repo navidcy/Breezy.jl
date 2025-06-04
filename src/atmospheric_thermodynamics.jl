@@ -111,9 +111,10 @@ Arguments
 - `latent_heat`: Latent heat lost during phase transition from the gaseous state.
 - `heat_capacity`: Heat capacity of the transitional phase.
 """
-PhaseTransition(FT = Oceananigans.defaults.FloatType; latent_heat, heat_capacity)
-    PhaseTransition{FT}(convert(FT, latent_heat),
-                        convert(FT, heat_capacity))
+function PhaseTransition(FT = Oceananigans.defaults.FloatType; latent_heat, heat_capacity)
+    return PhaseTransition{FT}(convert(FT, latent_heat),
+                               convert(FT, heat_capacity))
+end
 
 water_condensation(FT) = PhaseTransition(FT; latent_heat=2500800, heat_capacity=4181)
 water_deposition(FT)   = PhaseTransition(FT; latent_heat=2834000, heat_capacity=2108)
