@@ -176,6 +176,12 @@ struct CondensateKernel{T}
     temperature :: T
 end
 
+function Adapt.adapt_structure(to, ck::CondensateKernel)
+    temperature = adapt(to, ck.temperature)
+    T = typeof(temperature)
+    return CondensateKernel{T}(temperature)
+end
+
 @inline function condensate_specific_humidity(i, j, k, grid, mb::MoistAirBuoyancy, T, q)
     z = Oceananigans.Grids.znode(i, j, k, grid, c, c, c)
     Ti = @inbounds T[i, j, k]

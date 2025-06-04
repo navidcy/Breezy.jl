@@ -32,8 +32,7 @@ function Adapt.adapt_structure(to, sat::Saturation)
     T₁ = adapt(to, sat.energy_reference_temperature)
     T₂ = adapt(to, sat.triple_point_temperature)
     p₃ = adapt(to, sat.triple_point_pressure)
-    FT = typeof(T₁)  # assume all same type
-    return Saturation{FT}(T₁, T₂, p₃)
+    return Saturation(T₁, T₂, p₃)
 end
 
 """
