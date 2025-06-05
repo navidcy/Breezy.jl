@@ -3,17 +3,19 @@ using Oceananigans.Units
 using Printf
 using AquaSkyLES
 
+arch = CPU()
+
 Nx = Nz = 128
 Lz = 4 * 1024
-grid = RectilinearGrid(size=(Nx, Nz), x=(0, 2Lz), z=(0, Lz), topology=(Periodic, Flat, Bounded))
+grid = RectilinearGrid(arch, size=(Nx, Nz), x=(0, 2Lz), z=(0, Lz), topology=(Periodic, Flat, Bounded))
 
 p₀ = 101325 # Pa
 θ₀ = 288 # K
 reference_state = AquaSkyLES.ReferenceState(base_pressure=p₀, potential_temperature=θ₀)
 buoyancy = AquaSkyLES.MoistAirBuoyancy(; reference_state) #, microphysics)
 
-# Simple precipitation scheme from CloudMicrophysics    
-using CloudMicrophysics 
+# Simple precipitation scheme from CloudMicrophysics
+using CloudMicrophysics
 using CloudMicrophysics.Microphysics0M: remove_precipitation
 
 FT = eltype(grid)
