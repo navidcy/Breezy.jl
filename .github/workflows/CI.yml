@@ -16,9 +16,7 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - '1.9'  # Current stable
           - '1.10'  # Latest release
-          - 'nightly'
         os:
           - ubuntu-latest
           - macOS-latest
