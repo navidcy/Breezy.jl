@@ -49,8 +49,7 @@ Fq_precip = Forcing(precipitation, field_dependencies=:q, parameters=microphysic
 
 # See Siebesma et al (2003), appendix B1-B2
 θ_bcs = FieldBoundaryConditions(bottom=FluxBoundaryCondition(8e-3))
-#q_bcs = FieldBoundaryConditions(bottom=FluxBoundaryCondition(5.2e-5))
-q_bcs = FieldBoundaryConditions(bottom=FluxBoundaryCondition(1e-4))
+q_bcs = FieldBoundaryConditions(bottom=FluxBoundaryCondition(5.2e-5))
 
 u★ = 0.28 # m/s
 @inline u_drag(x, y, t, u, v, u★) = - u★^2 * u / sqrt(u^2 + v^2)
@@ -126,9 +125,9 @@ drying = Field{Nothing, Nothing, Center}(grid)
 dqdt_bomex = AtmosphericProfilesLibrary.Bomex_dqtdt(FT)
 set!(drying, z -> dqdt_bomex(z))
 Fq_drying = Forcing(drying)
-#q_forcing = (Fq_precip, Fq_drying, Fq_subsidence)
+q_forcing = (Fq_precip, Fq_drying, Fq_subsidence)
 #q_forcing = (Fq_drying, Fq_subsidence)
-q_forcing = Fq_subsidence
+# q_forcing = Fq_subsidence
 
 Fθ_field = Field{Nothing, Nothing, Center}(grid)
 dTdt_bomex = AtmosphericProfilesLibrary.Bomex_dTdt(FT)
@@ -140,8 +139,7 @@ advection = WENO() #(momentum=WENO(), θ=WENO(), q=WENO(bounds=(0, 1)))
 model = NonhydrostaticModel(; grid, advection, buoyancy, coriolis,
                             tracers = (:θ, :q),
                             # tracers = (:θ, :q, :qˡ, :qⁱ, :qʳ, :qˢ),
-                            #forcing = (q=q_forcing, u=u_forcing, v=v_forcing, θ=θ_forcing),
-                            forcing = (; θ=θ_forcing),
+                            forcing = (q=q_forcing, u=u_forcing, v=v_forcing, θ=θ_forcing),
                             boundary_conditions = (θ=θ_bcs, q=q_bcs, u=u_bcs))
 
 θϵ = 20
