@@ -3,9 +3,10 @@ using ..Thermodynamics:
     mixture_heat_capacity,
     mixture_gas_constant
 
-using Oceananigans.BoundaryConditions: fill_halo_regions!
+using Oceananigans.BoundaryConditions: fill_halo_regions!, apply_x_bcs!, apply_y_bcs!, apply_z_bcs!
 using Oceananigans.ImmersedBoundaries: mask_immersed_field!
 using Oceananigans.Architectures: architecture
+
 import Oceananigans.TimeSteppers: update_state!
 import Oceananigans: fields, prognostic_fields
 
@@ -21,7 +22,7 @@ fields(model::AnelasticModel) = prognostic_fields(model)
 function update_state!(model::AnelasticModel, callbacks=[]; compute_tendencies=true)
     fill_halo_regions!(prognostic_fields(model), model.clock, fields(model), async=true)
     compute_auxiliary_variables!(model)
-    # update_hydrostatic_pressure!(model)
+    update_hydrostatic_pressure!(model)
     compute_tendencies && compute_tendencies!(model)
     return nothing
 end
@@ -136,6 +137,15 @@ function compute_tendencies!(model::AnelasticModel)
     Fρq = model.forcing.ρq
     ρq_args = tuple(ρq, Fρq, scalar_args...)
     launch!(arch, grid, :xyz, compute_scalar_tendency!, Gρq, grid, ρq_args)
+
+    # Compute boundary flux contributions
+    prognostic_model_fields = prognostic_fields(model)
+    args = (arch, model.clock, fields(model))
+    field_indices = 1:length(prognostic_model_fields)
+    Gⁿ = model.timestepper.Gⁿ
+    foreach(q -> apply_x_bcs!(Gⁿ[q], prognostic_model_fields[q], args...), field_indices)
+    foreach(q -> apply_y_bcs!(Gⁿ[q], prognostic_model_fields[q], args...), field_indices)
+    foreach(q -> apply_z_bcs!(Gⁿ[q], prognostic_model_fields[q], args...), field_indices)
 
     return nothing
 end
