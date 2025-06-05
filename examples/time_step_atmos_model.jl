@@ -2,8 +2,12 @@ using AquaSkyLES.AtmosphereModels: AtmosphereModel
 using Oceananigans
 using Printf
 
-grid = RectilinearGrid(size=(2, 2, 128), x=(0, 1), y=(0, 1), z=(0, 25e3))
-model = AtmosphereModel(grid, advection=nothing)
+Lx = 30e3
+Ly = 30e3
+Lz = 30e3
+
+grid = RectilinearGrid(size=(64, 64, 64), x=(0, Lx), y=(0, Ly), z=(0, 25e3))
+model = AtmosphereModel(grid, advection=WENO())
 
 Lz = grid.Lz
 Δθ = 5 # K
@@ -13,7 +17,11 @@ qᵢ(x, y, z) = 0
 Ξᵢ(x, y, z) = 1e-6 * randn()
 set!(model, θ=θᵢ, q=qᵢ, u=Ξᵢ, v=Ξᵢ)
 
-simulation = Simulation(model, Δt=1e-16, stop_iteration=10)
+ρu, ρv, ρw = model.momentum
+δ = Field(∂x(ρu) + ∂y(ρv) + ∂z(ρw))
+compute!(δ)
+
+simulation = Simulation(model, Δt=1, stop_iteration=100)
 
 using Printf
 
@@ -38,3 +46,5 @@ function progress(sim)
 end
 
 add_callback!(simulation, progress, IterationInterval(1))
+
+run!(simulation)
