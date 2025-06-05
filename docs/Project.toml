@@ -1,6 +1,5 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
-AquaSkyLES = "a82b1ff1-3097-4ccd-a573-66c5d61c0c63"
 
 [compat]
 Documenter = "1" 
