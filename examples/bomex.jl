@@ -4,7 +4,7 @@ using Oceananigans.Units
 using Printf
 using AquaSkyLES
 
-arch = GPU()
+arch = CPU()
 
 # Siebesma et al (2003) resolution!
 # DOI: https://doi.org/10.1175/1520-0469(2003)60<1201:ALESIS>2.0.CO;2
@@ -35,8 +35,8 @@ u_bomex = AtmosphericProfilesLibrary.Bomex_u(FT)
 
 p₀ = 101325 # Pa
 θ₀ = θ_bomex(0) # K
-reference_state = AquaSkyLES.ReferenceState(base_pressure=p₀, potential_temperature=θ₀)
-buoyancy = AquaSkyLES.MoistAirBuoyancy(; reference_state) #, microphysics)
+reference_constants = AquaSkyLES.Thermodynamics.ReferenceConstants(base_pressure=p₀, potential_temperature=θ₀)
+buoyancy = AquaSkyLES.MoistAirBuoyancy(; reference_constants) #, microphysics)
 
 # Simple precipitation scheme from CloudMicrophysics    
 using CloudMicrophysics 

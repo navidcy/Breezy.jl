@@ -11,8 +11,8 @@ grid = RectilinearGrid(arch, size=(Nx, Nz), x=(0, 2Lz), z=(0, Lz), topology=(Per
 
 p₀ = 101325 # Pa
 θ₀ = 288 # K
-reference_state = AquaSkyLES.ReferenceState(base_pressure=p₀, potential_temperature=θ₀)
-buoyancy = AquaSkyLES.MoistAirBuoyancy(; reference_state) #, microphysics)
+reference_constants = AquaSkyLES.Thermodynamics.ReferenceConstants(base_pressure=p₀, potential_temperature=θ₀)
+buoyancy = AquaSkyLES.MoistAirBuoyancy(; reference_constants)
 
 # Simple precipitation scheme from CloudMicrophysics
 using CloudMicrophysics
@@ -23,7 +23,7 @@ microphysics = CloudMicrophysics.Parameters.Parameters0M{FT}(τ_precip=600, S_0=
 @inline precipitation(x, z, t, q, params) = remove_precipitation(params, q, 0)
 q_forcing = Forcing(precipitation, field_dependencies=:q, parameters=microphysics)
 
-ρ₀ = AquaSkyLES.base_density(buoyancy) # air density at z=0
+ρ₀ = AquaSkyLES.MoistAirBuoyancies.base_density(buoyancy) # air density at z=0
 cₚ = buoyancy.thermodynamics.dry_air.heat_capacity
 Q₀ = 1000 # heat flux in W / m²
 Jθ = Q₀ / (ρ₀ * cₚ) # temperature flux
@@ -41,7 +41,7 @@ model = NonhydrostaticModel(; grid, advection, buoyancy,
 
 Lz = grid.Lz
 Δθ = 5 # K
-Tₛ = reference_state.θ # K
+Tₛ = reference_constants.reference_potential_temperature # K
 θᵢ(x, z) = Tₛ + Δθ * z / Lz + 1e-2 * Δθ * randn()
 qᵢ(x, z) = 0 # 1e-2 + 1e-5 * rand()
 set!(model, θ=θᵢ, q=qᵢ)
