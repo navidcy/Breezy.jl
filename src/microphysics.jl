@@ -1,5 +1,5 @@
 #####
-##### Saturation adjustment
+##### Microphysics schemes
 #####
 
 # Solve
@@ -14,7 +14,7 @@
     T₁ = Π * state.θ
     qˡ₁ = condensate_specific_humidity(T₁, state, ref, thermo)
     qˡ₁ <= 0 && return T₁
-    
+
     # If we made it this far, we have condensation
     r₁ = saturation_adjustment_residual(T₁, Π, qˡ₁, state, thermo)
 
@@ -27,7 +27,7 @@
     # Saturation adjustment
     R = sqrt(max(T₂, T₁))
     ϵ = convert(FT, 1e-4)
-    δ = ϵ * R 
+    δ = ϵ * R
     iter = 0
 
     while abs(r₂ - r₁) > δ
