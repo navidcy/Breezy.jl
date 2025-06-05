@@ -136,7 +136,6 @@ end
 ##### Anelastic pressure solver utilities
 #####
 
-
 struct AnelasticTridiagonalSolverFormulation{R}
     reference_density :: R
 end

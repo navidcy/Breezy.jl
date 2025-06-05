@@ -1,8 +1,7 @@
 import Oceananigans.Fields: set!
 using Oceananigans.TimeSteppers: update_state!
 using Oceananigans.BoundaryConditions: fill_halo_regions!
-using Oceananigans.Models.NonhydrostaticModels: calculate_pressure_correction!, make_pressure_correction!
-using Oceananigans.Models.NonhydrostaticModels: compute_pressure_correction!, pressure_correct_velocities!
+using Oceananigans.Models.NonhydrostaticModels: compute_pressure_correction!, make_pressure_correction!
 
 function set!(model::AtmosphereModel; enforce_mass_conservation=true, kw...)
     for (name, value) in kw
@@ -54,7 +53,7 @@ function set!(model::AtmosphereModel; enforce_mass_conservation=true, kw...)
     
     if enforce_mass_conservation
         FT = eltype(model.grid)
-        calculate_pressure_correction!(model, one(FT))
+        compute_pressure_correction!(model, one(FT))
         make_pressure_correction!(model, one(FT))
         update_state!(model, compute_tendencies=false)
         compute_pressure_correction!(model, one(FT))

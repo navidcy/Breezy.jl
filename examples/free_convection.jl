@@ -9,10 +9,10 @@ grid = RectilinearGrid(size=(Nx, Nz), x=(0, 2Lz), z=(0, Lz), topology=(Periodic,
 
 p₀ = 101325 # Pa
 θ₀ = 288 # K
-reference_state = AquaSkyLES.ReferenceConstants(base_pressure=p₀, potential_temperature=θ₀)
-buoyancy = AquaSkyLES.MoistAirBuoyancy(; reference_state)
+reference_constants = AquaSkyLES.Thermodynamics.ReferenceConstants(base_pressure=p₀, potential_temperature=θ₀)
+buoyancy = AquaSkyLES.MoistAirBuoyancy(; reference_constants)
 
-ρ₀ = AquaSkyLES.base_density(buoyancy) # air density at z=0
+ρ₀ = AquaSkyLES.MoistAirBuoyancies.base_density(buoyancy) # air density at z=0
 cₚ = buoyancy.thermodynamics.dry_air.heat_capacity
 Q₀ = 1000 # heat flux in W / m²
 Jθ = Q₀ / (ρ₀ * cₚ) # temperature flux
@@ -29,7 +29,7 @@ model = NonhydrostaticModel(; grid, advection, buoyancy,
 
 Lz = grid.Lz
 Δθ = 5 # K
-Tₛ = reference_state.θ # K
+Tₛ = reference_constants.reference_potential_temperature # K
 θᵢ(x, z) = Tₛ + Δθ * z / Lz + 1e-2 * Δθ * randn()
 qᵢ(x, z) = 1e-2 + 1e-5 * rand()
 set!(model, θ=θᵢ, q=qᵢ)

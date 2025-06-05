@@ -1,6 +1,10 @@
 module MoistAirBuoyancies
 
-export MoistAirBuoyancy, UnsaturatedMoistAirBuoyancy
+export MoistAirBuoyancy
+export UnsaturatedMoistAirBuoyancy
+export TemperatureField
+export CondensateField
+export SaturationField
 
 using Oceananigans
 using Oceananigans: AbstractModel
@@ -15,36 +19,13 @@ using ..Thermodynamics:
     ReferenceConstants,
     mixture_heat_capacity,
     mixture_gas_constant,
+    reference_specific_volume,
     reference_pressure
 
-struct UnsaturatedMoistAirBuoyancy{FT} <: AbstractBuoyancyFormulation{Nothing}
-    expansion_coefficient :: FT
-    reference_potential_temperature :: FT
-    gas_constant_ratio :: FT
-end
-
-function UnsaturatedMoistAirBuoyancy(FT=Oceananigans.defaults.FloatType;
-                                     expansion_coefficient = 3.27e-2,
-                                     reference_potential_temperature = 0,
-                                     gas_constant_ratio = 1.61)
-
-    return UnsaturatedMoistAirBuoyancy{FT}(expansion_coefficient,
-                                           reference_potential_temperature,
-                                           gas_constant_ratio)
-end
-
-required_tracers(::UnsaturatedMoistAirBuoyancy) = (:θ, :q)
-
-@inline function buoyancy_perturbationᶜᶜᶜ(i, j, k, grid, mb::UnsaturatedMoistAirBuoyancy, tracers)
-    β = mb.expansion_coefficient
-    θ₀ = mb.reference_potential_temperature
-    ϵᵥ = mb.gas_constant_ratio
-    δ = ϵᵥ - 1
-    θ = @inbounds tracers.θ[i, j, k]
-    q = @inbounds tracers.q[i, j, k]
-    θᵥ = θ * (1 + δ * q)
-    return β * (θᵥ - θ₀)
-end
+import ..Thermodynamics:
+    base_density,
+    saturation_specific_humidity,
+    condensate_specific_humidity
 
 struct MoistAirBuoyancy{FT} <: AbstractBuoyancyFormulation{Nothing}
     thermodynamics :: AtmosphereThermodynamics{FT}
@@ -253,6 +234,40 @@ end
     pᵣ = reference_pressure(state.z, ref, thermo)
     p₀ = ref.base_pressure
     return (pᵣ / p₀)^inv_ϰᵐ
+end
+
+#####
+##### Reference implementation of an "unsaturated" moist air buoyancy model,
+##### which assumes unsaturated air
+#####
+
+struct UnsaturatedMoistAirBuoyancy{FT} <: AbstractBuoyancyFormulation{Nothing}
+    expansion_coefficient :: FT
+    reference_potential_temperature :: FT
+    gas_constant_ratio :: FT
+end
+
+function UnsaturatedMoistAirBuoyancy(FT=Oceananigans.defaults.FloatType;
+                                     expansion_coefficient = 3.27e-2,
+                                     reference_potential_temperature = 0,
+                                     gas_constant_ratio = 1.61)
+
+    return UnsaturatedMoistAirBuoyancy{FT}(expansion_coefficient,
+                                           reference_potential_temperature,
+                                           gas_constant_ratio)
+end
+
+required_tracers(::UnsaturatedMoistAirBuoyancy) = (:θ, :q)
+
+@inline function buoyancy_perturbationᶜᶜᶜ(i, j, k, grid, mb::UnsaturatedMoistAirBuoyancy, tracers)
+    β = mb.expansion_coefficient
+    θ₀ = mb.reference_potential_temperature
+    ϵᵥ = mb.gas_constant_ratio
+    δ = ϵᵥ - 1
+    θ = @inbounds tracers.θ[i, j, k]
+    q = @inbounds tracers.q[i, j, k]
+    θᵥ = θ * (1 + δ * q)
+    return β * (θᵥ - θ₀)
 end
 
 end # module
