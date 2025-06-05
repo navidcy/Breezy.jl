@@ -1,4 +1,4 @@
-using AquaSkyLES.AtmosphereModels: AtmosphereModel
+using Breeze.AtmosphereModels: AtmosphereModel
 using Oceananigans
 using Printf
 

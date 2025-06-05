@@ -5,7 +5,7 @@ using Pkg; Pkg.activate(".")
 using Oceananigans
 using Oceananigans.Units
 using Printf
-using AquaSkyLES
+using Breeze
 
 arch = CPU()
 
@@ -36,8 +36,8 @@ u_bomex = AtmosphericProfilesLibrary.Bomex_u(FT)
 
 p₀ = 101325 # Pa
 θ₀ = θ_bomex(0) # K
-reference_state = AquaSkyLES.ReferenceState(base_pressure=p₀, potential_temperature=θ₀)
-buoyancy = AquaSkyLES.MoistAirBuoyancy(; reference_state) #, microphysics)
+reference_state = Breeze.ReferenceState(base_pressure=p₀, potential_temperature=θ₀)
+buoyancy = Breeze.MoistAirBuoyancy(; reference_state) #, microphysics)
 
 # Simple precipitation scheme from CloudMicrophysics    
 using CloudMicrophysics 
@@ -153,9 +153,9 @@ set!(model, θ=θᵢ, q=qᵢ, u=uᵢ)
 simulation = Simulation(model, Δt=10, stop_time=1hours)
 conjure_time_step_wizard!(simulation, cfl=0.7)
 
-T = AquaSkyLES.TemperatureField(model)
-qˡ = AquaSkyLES.CondensateField(model, T)
-qᵛ★ = AquaSkyLES.SaturationField(model, T)
+T = Breeze.TemperatureField(model)
+qˡ = Breeze.CondensateField(model, T)
+qᵛ★ = Breeze.SaturationField(model, T)
 δ = Field(model.tracers.q - qᵛ★)
 
 function progress(sim)
