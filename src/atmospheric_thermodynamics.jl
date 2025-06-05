@@ -220,7 +220,7 @@ dp/dT = ℒᵛ / (Rᵛ T^2)
     cᵖᵛ = thermo.vapor.heat_capacity
     Rᵛ  = vapor_gas_constant(thermo)
 
-    aᵛ = (cᵖᵛ - cᵖˡ) 
+    aᵛ = (cᵖᵛ - cᵖˡ) / Rᵛ
     bᵛ = ℒ₀ / Rᵛ - aᵛ * T₀
 
     return pᵗʳ * (T / Tᵗʳ)^aᵛ * exp(bᵛ * (1/Tᵗʳ - 1/T))
