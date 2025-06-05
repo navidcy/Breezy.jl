@@ -11,9 +11,9 @@ arch = CPU()
 # Nx = Ny = 64
 # Nz = 75
 
-Nx = 128
+Nx = 64
 Ny = 1
-Nz = 150
+Nz = 75
 
 Lx = 6400
 Ly = 6400
@@ -33,8 +33,8 @@ FT = eltype(grid)
 q_bomex = AtmosphericProfilesLibrary.Bomex_q_tot(FT)
 u_bomex = AtmosphericProfilesLibrary.Bomex_u(FT)
 
-p₀ = 101325 # Pa
-θ₀ = θ_bomex(0) # K
+p₀ = 1e5   # Pa
+θ₀ = 299.1 # K
 reference_state = AquaSkyLES.ReferenceState(base_pressure=p₀, potential_temperature=θ₀)
 buoyancy = AquaSkyLES.MoistAirBuoyancy(; reference_state) #, microphysics)
 
@@ -47,8 +47,10 @@ microphysics = CloudMicrophysics.Parameters.Parameters0M{FT}(τ_precip=600, S_0=
 @inline precipitation(x, y, z, t, q, params) = remove_precipitation(params, q, 0)
 Fq_precip = Forcing(precipitation, field_dependencies=:q, parameters=microphysics)
 
+# See Siebesma et al (2003), appendix B1-B2
 θ_bcs = FieldBoundaryConditions(bottom=FluxBoundaryCondition(8e-3))
-q_bcs = FieldBoundaryConditions(bottom=FluxBoundaryCondition(5.2e-5))
+#q_bcs = FieldBoundaryConditions(bottom=FluxBoundaryCondition(5.2e-5))
+q_bcs = FieldBoundaryConditions(bottom=FluxBoundaryCondition(1e-4))
 
 u★ = 0.28 # m/s
 @inline u_drag(x, y, t, u, v, u★) = - u★^2 * u / sqrt(u^2 + v^2)
@@ -124,7 +126,9 @@ drying = Field{Nothing, Nothing, Center}(grid)
 dqdt_bomex = AtmosphericProfilesLibrary.Bomex_dqtdt(FT)
 set!(drying, z -> dqdt_bomex(z))
 Fq_drying = Forcing(drying)
-q_forcing = (Fq_precip, Fq_drying, Fq_subsidence)
+#q_forcing = (Fq_precip, Fq_drying, Fq_subsidence)
+#q_forcing = (Fq_drying, Fq_subsidence)
+q_forcing = Fq_subsidence
 
 Fθ_field = Field{Nothing, Nothing, Center}(grid)
 dTdt_bomex = AtmosphericProfilesLibrary.Bomex_dTdt(FT)
@@ -133,11 +137,11 @@ Fθ_radiation = Forcing(Fθ_field)
 θ_forcing = (Fθ_radiation, Fθ_subsidence)
 
 advection = WENO() #(momentum=WENO(), θ=WENO(), q=WENO(bounds=(0, 1)))
-tracers = (:θ, :q)
 model = NonhydrostaticModel(; grid, advection, buoyancy, coriolis,
                             tracers = (:θ, :q),
                             # tracers = (:θ, :q, :qˡ, :qⁱ, :qʳ, :qˢ),
-                            forcing = (; q=q_forcing, u=u_forcing, v=v_forcing, θ=θ_forcing),
+                            #forcing = (q=q_forcing, u=u_forcing, v=v_forcing, θ=θ_forcing),
+                            forcing = (; θ=θ_forcing),
                             boundary_conditions = (θ=θ_bcs, q=q_bcs, u=u_bcs))
 
 θϵ = 20
