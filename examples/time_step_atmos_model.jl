@@ -1,5 +1,6 @@
 using AquaSkyLES.AtmosphereModels: AtmosphereModel
 using Oceananigans
+using Printf
 
 grid = RectilinearGrid(size=(2, 2, 128), x=(0, 1), y=(0, 1), z=(0, 25e3))
 model = AtmosphereModel(grid, advection=nothing)
@@ -37,41 +38,3 @@ function progress(sim)
 end
 
 add_callback!(simulation, progress, IterationInterval(1))
-run!(simulation)
-
-using GLMakie
-
-using AquaSkyLES.Thermodynamics: dry_air_gas_constant
-cᵖᵈ = model.thermodynamics.dry_air.heat_capacity
-Rᵈ = dry_air_gas_constant(model.thermodynamics)
-pᵣ = model.formulation.reference_pressure
-Π = Field((pᵣ / pᵣ[1, 1, 1])^(Rᵈ / cᵖᵈ))
-compute!(Π)
-
-θ = CenterField(grid)
-set!(θ, θᵢ)
-T1 = Field(θ * Π)
-compute!(T1)
-
-fig = Figure(size=(1000, 1000))
-
-axT = Axis(fig[1, 1], title="Temperature")
-lines!(axT, view(model.temperature, 1, 1, :))
-lines!(axT, view(T1, 1, 1, :))
-
-axp = Axis(fig[1, 2], title="Reference Pressure")
-lines!(axp, model.formulation.reference_pressure)
-
-axp = Axis(fig[1, 3], title="Reference Density")
-lines!(axp, model.formulation.reference_density)
-
-axq = Axis(fig[1, 4], title="Specific Humidity")
-lines!(axq, view(model.specific_humidity, 1, 1, :))
-
-axe = Axis(fig[1, 5], title="Energy")
-lines!(axe, view(model.energy, 1, 1, :))
-
-axw = Axis(fig[1, 6], title="Velocity")
-lines!(axw, view(model.velocities.w, 1, 1, :))
-
-fig

@@ -14,7 +14,7 @@ using Oceananigans.Models: AbstractModel
 using Oceananigans.Architectures: AbstractArchitecture
 using Oceananigans.TimeSteppers: TimeStepper
 using Oceananigans.BoundaryConditions: FieldBoundaryConditions, regularize_field_boundary_conditions
-using Oceananigans.Solvers: FourierTridiagonalPoissonSolver
+using Oceananigans.Solvers: FourierTridiagonalPoissonSolver, HomogeneousNeumannFormulation
 using Oceananigans.Utils: launch!
 
 using KernelAbstractions: @kernel, @index
@@ -28,6 +28,7 @@ struct DefaultValue end
 tupleit(t::Tuple) = t
 tupleit(t) = tuple(t)
 
+formulation_pressure_solver(formulation, grid) = nothing
 
 mutable struct AtmosphereModel{Frm, Arc, Tst, Grd, Clk, Thm, Den, Mom, Eng, Wat, Hum,
                                Tmp, Prs, Ppa, Sol, Vel, Trc, Adv, Cor, Frc, Mic, Cnd, Cls, Dif} <: AbstractModel{Tst, Arc}
@@ -115,7 +116,7 @@ function AtmosphereModel(grid;
                                                   tracers)
 
     timestepper = TimeStepper(timestepper, grid, prognostic_fields)
-    pressure_solver = FourierTridiagonalPoissonSolver(grid, tridiagonal_direction=ZDirection())
+    pressure_solver = formulation_pressure_solver(formulation, grid)
 
     # TODO: support these
     closure = nothing

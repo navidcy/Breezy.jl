@@ -1,4 +1,8 @@
+using Oceananigans.Architectures: architecture
+using Oceananigans.Grids: inactive_cell
 using Oceananigans.Utils: prettysummary
+using Oceananigans.Operators: Δzᵃᵃᶜ, Δzᵃᵃᶠ, divᶜᶜᶜ
+using Oceananigans.Solvers: solve!
 
 using ..Thermodynamics:
     AtmosphereThermodynamics,
@@ -9,11 +13,22 @@ using ..Thermodynamics:
     mixture_heat_capacity,
     dry_air_gas_constant
 
+using KernelAbstractions: @kernel, @index
+
+import Oceananigans.Solvers: tridiagonal_direction, compute_main_diagonal!
+import Oceananigans.TimeSteppers: compute_pressure_correction!, make_pressure_correction!
+
+#####
+##### Formulation definition
+#####
+
 struct AnelasticFormulation{FT, F}
     constants :: ReferenceConstants{FT}
     reference_pressure :: F
     reference_density :: F
 end
+
+const AnelasticModel = AtmosphereModel{<:AnelasticFormulation}
 
 function Base.summary(formulation::AnelasticFormulation)
     p₀ = formulation.constants.base_pressure
@@ -43,6 +58,10 @@ function AnelasticFormulation(grid, state_constants, thermo)
     fill_halo_regions!(ρᵣ)
     return AnelasticFormulation(state_constants, pᵣ, ρᵣ)
 end
+
+#####
+##### Thermodynamic state
+#####
 
 function thermodynamic_state(i, j, k, grid, formulation::AnelasticFormulation, thermo, energy, absolute_humidity)
     @inbounds begin
@@ -111,4 +130,149 @@ function materialize_momentum_and_velocities(formulation::AnelasticFormulation, 
     velocities = (; u, v, w)
 
     return velocities, momentum
+end
+
+#####
+##### Anelastic pressure solver utilities
+#####
+
+
+struct AnelasticTridiagonalSolverFormulation{R}
+    reference_density :: R
+end
+
+tridiagonal_direction(formulation::AnelasticTridiagonalSolverFormulation) = ZDirection()
+
+function formulation_pressure_solver(anelastic_formulation::AnelasticFormulation, grid)
+    reference_density = anelastic_formulation.reference_density
+    tridiagonal_formulation = AnelasticTridiagonalSolverFormulation(reference_density)
+    solver = FourierTridiagonalPoissonSolver(grid; tridiagonal_formulation)
+    return solver
+end
+
+# Note: diagonal coefficients depend on non-tridiagonal directions because
+# eigenvalues depend on non-tridiagonal directions.
+function compute_main_diagonal!(main_diagonal, formulation::AnelasticTridiagonalSolverFormulation, grid, λ1, λ2)
+    arch = grid.architecture
+    reference_density = formulation.reference_density
+    launch!(arch, grid, :xy, _compute_anelastic_main_diagonal!, main_diagonal, grid, λ1, λ2, reference_density)
+    return nothing
+end
+
+@kernel function _compute_anelastic_main_diagonal!(D, grid, λx, λy, reference_density)
+    i, j = @index(Global, NTuple)
+    Nz = size(grid, 3)
+
+    # Using a homogeneous Neumann (zero Gradient) boundary condition:
+    @inbounds begin
+        ρ¹ = @inbounds reference_density[1, 1, 1]
+        ρᴺ = @inbounds reference_density[1, 1, Nz]
+
+        D[i, j, 1]  = -1 / Δzᵃᵃᶠ(i, j,  2, grid) - ρ¹ * Δzᵃᵃᶜ(i, j,  1, grid) * (λx[i] + λy[j])
+        D[i, j, Nz] = -1 / Δzᵃᵃᶠ(i, j, Nz, grid) - ρᴺ * Δzᵃᵃᶜ(i, j, Nz, grid) * (λx[i] + λy[j])
+
+        for k in 2:Nz-1
+            ρᵏ = @inbounds reference_density[1, 1, k]
+            ρ⁺ = @inbounds reference_density[1, 1, k+1]
+            ρ⁻ = @inbounds reference_density[1, 1, k-1]
+
+            ρ̄⁺ = (ρᵏ + ρ⁺) / 2
+            ρ̄ᵏ = (ρ⁻ + ρᵏ) / 2
+
+            D[i, j, k] = - (ρ̄⁺ / Δzᵃᵃᶠ(i, j, k+1, grid) + ρ̄ᵏ / Δzᵃᵃᶠ(i, j, k, grid)) - ρᵏ * Δzᵃᵃᶜ(i, j, k, grid) * (λx[i] + λy[j])
+        end
+    end
+end
+
+@kernel function _compute_lower_diagonal!(lower_diagonal, formulation::AnelasticTridiagonalSolverFormulation, grid)
+    k = @index(Global)
+    @inbounds begin
+        ρᵏ = formulation.reference_density[1, 1, k]
+        ρ⁺ = formulation.reference_density[1, 1, k+1]
+        ρ̄⁺ = (ρᵏ + ρ⁺) / 2
+        lower_diagonal[k] = ρ̄⁺ / Δzᵃᵃᶠ(1, 1, k+1, grid)
+    end
+end
+
+"""
+    compute_pressure_correction!(model::NonhydrostaticModel, Δt)
+
+Calculate the (nonhydrostatic) pressure correction associated `tendencies`, `velocities`, and step size `Δt`.
+"""
+function compute_pressure_correction!(model::AnelasticModel, Δt)
+    # Mask immersed velocities
+    foreach(mask_immersed_field!, model.momentum)
+    fill_halo_regions!(model.momentum, model.clock, fields(model))
+
+    ρʳ = model.formulation.reference_density
+    ρŨ = model.momentum
+    solver = model.pressure_solver
+    pₙ = model.nonhydrostatic_pressure
+    solve_for_anelastic_pressure!(pₙ, solver, ρʳ, ρŨ)
+
+    fill_halo_regions!(pₙ)
+
+    return nothing
+end
+
+function solve_for_anelastic_pressure!(pₙ, solver, ρʳ, ρŨ)
+    compute_anelastic_source_term!(solver, ρʳ, ρŨ)
+    solve!(pₙ, solver)
+    return pₙ
+end
+
+function compute_anelastic_source_term!(solver::FourierTridiagonalPoissonSolver, ρʳ, ρŨ)
+    rhs = solver.source_term
+    arch = architecture(solver)
+    grid = solver.grid
+    launch!(arch, grid, :xyz, _compute_anelastic_source_term!, rhs, grid, ρʳ, ρŨ)
+    return nothing
+end
+
+@kernel function _compute_anelastic_source_term!(rhs, grid, ρʳ, ρŨ)
+    i, j, k = @index(Global, NTuple)
+    active = !inactive_cell(i, j, k, grid)
+    ρu, ρv, ρw = ρŨ
+    δ = divᶜᶜᶜ(i, j, k, grid, ρu, ρv, ρw)
+    @inbounds rhs[i, j, k] = active * ρʳ[i, j, k] * Δzᶜᶜᶜ(i, j, k, grid) * δ
+end
+
+#=
+function compute_source_term!(solver::DistributedFourierTridiagonalPoissonSolver, Ũ)
+    rhs = solver.storage.zfield
+    arch = architecture(solver)
+    grid = solver.local_grid
+    tdir = solver.batched_tridiagonal_solver.tridiagonal_direction
+    launch!(arch, grid, :xyz, _fourier_tridiagonal_source_term!, rhs, tdir, grid, Ũ)
+    return nothing
+end
+=#
+
+#####
+##### Fractional and time stepping
+#####
+
+"""
+Update the predictor velocities u, v, and w with the non-hydrostatic pressure via
+
+    `u^{n+1} = u^n - δₓp_{NH} / Δx * Δt`
+"""
+@kernel function _pressure_correct_momentum!(M, grid, Δt, pₙ)
+    i, j, k = @index(Global, NTuple)
+
+    @inbounds M.ρu[i, j, k] -= ∂xᶠᶜᶜ(i, j, k, grid, pₙ) * Δt
+    @inbounds M.ρv[i, j, k] -= ∂yᶜᶠᶜ(i, j, k, grid, pₙ) * Δt
+    @inbounds M.ρw[i, j, k] -= ∂zᶜᶜᶠ(i, j, k, grid, pₙ) * Δt
+end
+
+function make_pressure_correction!(model::AnelasticModel, Δt)
+
+    launch!(model.architecture, model.grid, :xyz,
+            _pressure_correct_momentum!,
+            model.momentum,
+            model.grid,
+            Δt,
+            model.nonhydrostatic_pressure)
+
+    return nothing
 end

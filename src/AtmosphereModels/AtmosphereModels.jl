@@ -1,7 +1,7 @@
 module AtmosphereModels
 
-include("anelastic_formulation.jl")
 include("atmosphere_model.jl")
+include("anelastic_formulation.jl")
 include("saturation_adjustment.jl")
 include("anelastic_pressure_correction.jl")
 include("update_hydrostatic_pressure.jl")
