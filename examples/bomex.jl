@@ -235,11 +235,11 @@ title = @lift "t = $(prettytime(times[$n]))"
 
 fig[0, :] = Label(fig, title, fontsize=22, tellwidth=false)
 
-Tmin = minimum(Tt)
-Tmax = maximum(Tt)
+Tmin = 299 #minimum(Tt)
+Tmax = 301 #maximum(Tt)
 wlim = maximum(abs, wt) / 2
 qlim = maximum(abs, qt)
-qˡlim = maximum(abs, qˡt) / 2
+qˡlim = maximum(abs, qˡt) / 2 + 1e-6
 
 Tₛ = θ_bomex(0)
 Δθ = θ_bomex(Lz) - θ_bomex(0)
