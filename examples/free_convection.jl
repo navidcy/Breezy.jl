@@ -1,7 +1,7 @@
 using Oceananigans
 using Oceananigans.Units
 using Printf
-using AquaSkyLES
+using Breeze
 
 arch = CPU()
 
@@ -11,8 +11,8 @@ grid = RectilinearGrid(arch, size=(Nx, Nz), x=(0, 2Lz), z=(0, Lz), topology=(Per
 
 p₀ = 101325 # Pa
 θ₀ = 288 # K
-reference_constants = AquaSkyLES.Thermodynamics.ReferenceConstants(base_pressure=p₀, potential_temperature=θ₀)
-buoyancy = AquaSkyLES.MoistAirBuoyancy(; reference_constants)
+reference_constants = Breeze.Thermodynamics.ReferenceConstants(base_pressure=p₀, potential_temperature=θ₀)
+buoyancy = Breeze.MoistAirBuoyancy(; reference_constants)
 
 # Simple precipitation scheme from CloudMicrophysics
 using CloudMicrophysics
@@ -23,7 +23,7 @@ microphysics = CloudMicrophysics.Parameters.Parameters0M{FT}(τ_precip=600, S_0=
 @inline precipitation(x, z, t, q, params) = remove_precipitation(params, q, 0)
 q_forcing = Forcing(precipitation, field_dependencies=:q, parameters=microphysics)
 
-ρ₀ = AquaSkyLES.MoistAirBuoyancies.base_density(buoyancy) # air density at z=0
+ρ₀ = Breeze.MoistAirBuoyancies.base_density(buoyancy) # air density at z=0
 cₚ = buoyancy.thermodynamics.dry_air.heat_capacity
 Q₀ = 1000 # heat flux in W / m²
 Jθ = Q₀ / (ρ₀ * cₚ) # temperature flux
@@ -49,9 +49,9 @@ set!(model, θ=θᵢ, q=qᵢ)
 simulation = Simulation(model, Δt=10, stop_time=4hours)
 conjure_time_step_wizard!(simulation, cfl=0.7)
 
-T = AquaSkyLES.TemperatureField(model)
-qˡ = AquaSkyLES.CondensateField(model, T)
-qᵛ★ = AquaSkyLES.SaturationField(model, T)
+T = Breeze.TemperatureField(model)
+qˡ = Breeze.CondensateField(model, T)
+qᵛ★ = Breeze.SaturationField(model, T)
 δ = Field(model.tracers.q - qᵛ★)
 
 function progress(sim)

@@ -1,4 +1,4 @@
-module AquaSkyLES
+module Breeze
 
 export MoistAirBuoyancy, AtmosphereThermodynamics, ReferenceConstants
 
@@ -11,4 +11,4 @@ using .MoistAirBuoyancies
 include("AtmosphereModels/AtmosphereModels.jl")
 using .AtmosphereModels
 
-end # module AquaSkyLES
+end # module Breeze
