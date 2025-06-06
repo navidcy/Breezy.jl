@@ -1,5 +1,3 @@
-push!(LOAD_PATH,"../src/")
-
 using Breeze
 using Documenter
 
@@ -13,7 +11,7 @@ makedocs(sitename="Breeze",
 )
 
 deploydocs(;
-    repo="github.com/gregorywagner/Breeze.jl",
+    repo="github.com/NumericalEarth/Breeze.jl",
     devbranch="main",
     push_preview=true,
-) 
+)
