@@ -1,19 +1,17 @@
-push!(LOAD_PATH,"../src/")
-
-using AquaSkyLES
+using Breeze
 using Documenter
 
-DocMeta.setdocmeta!(AquaSkyLES, :DocTestSetup, :(using AquaSkyLES); recursive=true)
+DocMeta.setdocmeta!(Breeze, :DocTestSetup, :(using Breeze); recursive=true)
 
-makedocs(sitename="AquaSkyLES",
+makedocs(sitename="Breeze",
     pages=[
         "Home" => "index.md",
         "API" => "api.md",
     ]
 )
 
-deploydocs(;
-    repo="github.com/gregorywagner/AquaSkyLES.jl",
+    repo="github.com/NumericalEarth/Breeze.jl",
     devbranch="main",
     push_preview=true,
-) 
+)
+

@@ -1,6 +1,6 @@
 using JLD2
-using AquaSkyLES
-using AquaSkyLES: saturation_specific_humidity, AtmosphereThermodynamics
+using Breeze
+using Breeze: saturation_specific_humidity, AtmosphereThermodynamics
 using GLMakie
 
 @load "JRA55_atmospheric_state_Jan_1_1991.jld2" q T p
@@ -23,12 +23,12 @@ ax4 = Axis(fig[2, 2], title="Liquid specific humidity")
 
 # Compute cloudiness for instantaneous drop
 θ⁻ = T .- 10
-Ψ = AquaSkyLES.ThermodynamicState{Float64}.(θ⁻, q, 0)
-ℛ = AquaSkyLES.ReferenceConstants{Float64}(101325, 20)
-T⁻ = AquaSkyLES.temperature.(Ψ, Ref(ℛ), Ref(thermo))
+Ψ = Breeze.ThermodynamicState{Float64}.(θ⁻, q, 0)
+ℛ = Breeze.ReferenceConstants{Float64}(101325, 20)
+T⁻ = Breeze.temperature.(Ψ, Ref(ℛ), Ref(thermo))
 qᵛ★ = saturation_specific_humidity.(T⁻, 1.2, Ref(thermo))
 qˡ = @. max(0, q - qᵛ★)
-Π = AquaSkyLES.exner_function.(Ψ, Ref(ℛ), Ref(thermo))
+Π = Breeze.exner_function.(Ψ, Ref(ℛ), Ref(thermo))
 Tu = @. Π * θ⁻
 ΔT = T⁻ - Tu
 
