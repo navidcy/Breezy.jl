@@ -3,7 +3,7 @@
 ## Thermodynamics
 
 ```@docs
-AquaSkyLES.AtmosphereThermodynamics
-AquaSkyLES.saturation_vapor_pressure
-AquaSkyLES.saturation_specific_humidity
+Breeze.AtmosphereThermodynamics
+Breeze.saturation_vapor_pressure
+Breeze.saturation_specific_humidity
 ``` 

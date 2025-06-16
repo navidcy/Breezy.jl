@@ -1,10 +1,10 @@
-# AquaSkyLES.jl
+# Breeze.jl
 
-Documentation for AquaSkyLES.jl
+Documentation for Breeze.jl
 
 ## Overview
 
-AquaSkyLES.jl is a Julia package for atmospheric thermodynamics calculations, particularly focused on Large Eddy Simulation (LES) applications.
+Breeze.jl is a Julia package for atmospheric thermodynamics calculations, particularly focused on Large Eddy Simulation (LES) applications.
 
 ## Features
 
@@ -14,11 +14,11 @@ AquaSkyLES.jl is a Julia package for atmospheric thermodynamics calculations, pa
 
 ## Installation
 
-To install AquaSkyLES.jl, use the Julia package manager:
+To install Breeze.jl, use the Julia package manager:
 
 ```julia
 using Pkg
-Pkg.add("AquaSkyLES")
+Pkg.add("Breeze")
 ```
 
 ## Quick Start
@@ -26,13 +26,13 @@ Pkg.add("AquaSkyLES")
 Here's a basic example of computing saturation specific humidity:
 
 ```julia
-using AquaSkyLES
+using Breeze
 
 # Create thermodynamics instance
-thermo = AquaSkyLES.AtmosphereThermodynamics()
+thermo = Breeze.AtmosphereThermodynamics()
 
 # Calculate saturation specific humidity
 T = 293.15  # Temperature in Kelvin (20°C)
 ρ = 1.2     # Density in kg/m³
-q★ = AquaSkyLES.saturation_specific_humidity(T, ρ, thermo, thermo.condensation)
+q★ = Breeze.saturation_specific_humidity(T, ρ, thermo, thermo.condensation)
 ``` 
