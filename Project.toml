@@ -19,3 +19,9 @@ CloudMicrophysics = "0.22.13"
 JLD2 = "0.5.13"
 Oceananigans = "0.96.31"
 RootSolvers = "0.4.4"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
