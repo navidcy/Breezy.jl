@@ -10,8 +10,8 @@ makedocs(sitename="Breeze",
     ]
 )
 
+deploydocs(;
     repo="github.com/NumericalEarth/Breeze.jl",
     devbranch="main",
     push_preview=true,
 )
-
