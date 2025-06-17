@@ -1,5 +1,11 @@
 # Breeze.jl
 
+
+<a href="https://numericalearth.github.io/Breeze.jl/dev/">
+  <img alt="Development documentation" src="https://img.shields.io/badge/documentation-in%20development-orange?style=flat-square">
+</a>
+
+
 ### Instructions
 
 First [install Julia](https://julialang.org/downloads/); suggested version 1.10. See [juliaup](https://github.com/JuliaLang/juliaup) README for how to install 1.10 and make that version the default.
