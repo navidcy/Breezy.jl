@@ -26,17 +26,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: julia-actions/setup-julia@v1
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-          
+
       - uses: julia-actions/cache@v1
-      
+
       - uses: julia-actions/julia-buildpkg@v1
-      
+
       - uses: julia-actions/julia-runtest@v1
         with:
           coverage: true
-          
