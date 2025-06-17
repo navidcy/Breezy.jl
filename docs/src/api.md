@@ -4,6 +4,5 @@
 
 ```@docs
 Breeze.AtmosphereThermodynamics
-Breeze.saturation_vapor_pressure
-Breeze.saturation_specific_humidity
-``` 
+Breeze.Thermodynamics.saturation_vapor_pressure
+```
